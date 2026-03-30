@@ -543,6 +543,13 @@ def get_role_manager() -> RoleManager:
     return _role_manager
 
 
+def reset_role_manager() -> None:
+    """Reset role manager (for testing)"""
+    global _role_manager
+    _role_manager = None
+    logger.info("🔄 Role Manager reset")
+
+
 __all__ = [
     'RoleManager',
     'get_role_manager',
