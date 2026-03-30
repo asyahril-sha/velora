@@ -234,6 +234,7 @@ class ServiceProviderBase:
         self.min_price = min_price
         self.personality = personality
         self.voice_style = voice_style
+        self._memory_manager = None
         
         # ========== SERVICE PROVIDER SPECIFIC ==========
         self.final_price: int = 0
