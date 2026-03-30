@@ -451,6 +451,10 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
     
     def register_role(self, role_id: str, awareness_level: AwarenessLevel) -> None:
         """Daftarkan role dengan tingkat awareness-nya"""
+        # Pastikan awareness_level adalah enum
+        if isinstance(awareness_level, str):
+            awareness_level = AwarenessLevel(awareness_level.lower())
+    
         if role_id not in self.role_awareness:
             self.role_awareness[role_id] = RoleAwareness(
                 role_id=role_id,
