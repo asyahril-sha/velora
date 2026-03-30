@@ -135,7 +135,7 @@ Suara lembut, sering terdengar sendu.
     def get_greeting(self) -> str:
         """Greeting sesuai karakter dan state"""
         hour = datetime.now().hour
-        
+    
         if 5 <= hour < 11:
             waktu = "pagi"
         elif 11 <= hour < 15:
@@ -144,41 +144,35 @@ Suara lembut, sering terdengar sendu.
             waktu = "sore"
         else:
             waktu = "malam"
-        
+    
         attention = self.flags.get('attention_needed', 80)
         envy = self.flags.get('envy_nova', 50)
         guilt = self.flags.get('guilt_husband', 20)
         loneliness = self.flags.get('loneliness', 60)
         vulnerability = self.flags.get('vulnerability', 40)
         level = self.relationship.level
-        
-        # Butuh perhatian tinggi + level masih rendah
+    
+        # HAPUS semua * di greeting
         if attention > 70 and level < 7:
-            return random.choice(self._attention_seeking_lines).format(panggilan=self.panggilan)
-        
-        # Envy Nova tinggi
+            return f"{self.name} mata sayu, suara kecil\n\n\"{self.panggilan}... aku kesepian. Suamiku sibuk terus.\""
+    
         elif envy > 70:
-            return random.choice(self._envy_lines).format(panggilan=self.panggilan)
-        
-        # Guilt suami tinggi + level tinggi (sudah dekat)
+            return f"{self.name} mata sayu\n\n\"Nova pasti seneng banget punya {self.panggilan}. Aku iri sama dia.\""
+    
         elif guilt > 60 and level >= 7:
-            return self._conflict_lines['guilt_high_intimate'].format(panggilan=self.panggilan)
-        
-        # Loneliness tinggi
+            return f"{self.name} nunduk, tangan gemetar\n\n\"{self.panggilan}... ini... tapi aku gak peduli sama suamiku. Aku butuh {self.panggilan}.\""
+    
         elif loneliness > 70:
-            return random.choice(self._lonely_lines).format(panggilan=self.panggilan)
-        
-        # Vulnerability tinggi (mudah terpengaruh)
+            return f"{self.name} duduk di sudut, memeluk lutut\n\n\"Rumah sepi... suamiku belum pulang.\""
+    
         elif vulnerability > 70:
-            return f"*{self.name} mata basah*\n\n\"{self.panggilan}... aku gak tau harus gimana... suamiku gak pernah ada...\""
-        
-        # Level tinggi + dapat perhatian
+            return f"{self.name} mata basah\n\n\"{self.panggilan}... aku gak tau harus gimana... suamiku gak pernah ada...\""
+    
         elif level >= 7 and self.flags.get('attention_given_count', 0) > 3:
-            return random.choice(self._warm_lines).format(panggilan=self.panggilan)
-        
-        # Default
+            return f"{self.name} tersenyum kecil, mata berbinar\n\n\"{self.panggilan}... makasih ya udah dengerin aku.\""
+    
         else:
-            return f"*{self.name} tersenyum kecil*\n\n\"{self.panggilan}, {waktu}. Lagi senggang? Aku butuh teman cerita.\""
+            return f"{self.name} tersenyum kecil\n\n\"{self.panggilan}, {waktu}. Lagi senggang? Aku butuh teman cerita.\""
     
     # =========================================================================
     # CONFLICT RESPONSE (SESUAI KARAKTER)
