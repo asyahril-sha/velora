@@ -23,6 +23,7 @@ from roles.manager import get_role_manager
 from worker.background import get_worker
 from telegram.helpers import escape_markdown
 
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -523,28 +524,62 @@ async def pause_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     set_user_mode(user_id, "paused")
     
-    # Save state
-    from memory.persistent import get_persistent
-    persistent = await get_persistent()
-    
-    # Save all states - HAPUS import core.brain
-    from core.emotional import get_emotional_engine
-    from core.relationship import get_relationship_manager
-    from core.conflict import get_conflict_engine
-    from core.memory import get_memory_manager
-    from core.world import get_world_state
-    
-    emo = get_emotional_engine()
-    rel = get_relationship_manager()
-    conflict = get_conflict_engine()
-    memory = get_memory_manager()
-    world = get_world_state()
-    
-    await persistent.save_emotional_state(emo)
-    await persistent.save_relationship_state(rel)
-    await persistent.save_conflict_state(conflict)
-    await persistent.save_world_state(world)
-    await persistent.save_memory_state(memory)
+    # Save state menggunakan method yang tersedia
+    try:
+        from memory.persistent import get_persistent
+        persistent = await get_persistent()
+        
+        # Dapatkan semua engine
+        from core.emotional import get_emotional_engine
+        from core.relationship import get_relationship_manager
+        from core.conflict import get_conflict_engine
+        from core.memory import get_memory_manager
+        from core.world import get_world_state
+        from roles.manager import get_role_manager  # <-- PERBAIKI IMPORT
+        
+        emo = get_emotional_engine()
+        rel = get_relationship_manager()
+        conflict = get_conflict_engine()
+        memory = get_memory_manager()
+        world = get_world_state()
+        role_manager = get_role_manager()
+        
+        # 1. Save world state (method ini ada di persistent.py)
+        await persistent.save_world_state(world)
+        
+        # 2. Save role states (method ini ada di role_manager)
+        await role_manager.save_all(persistent)
+        
+        # 3. Save emotional, relationship, conflict via set_state
+        import json
+        await persistent.set_state("emotional_engine", json.dumps(emo.to_dict()))
+        await persistent.set_state("relationship_manager", json.dumps(rel.to_dict()))
+        await persistent.set_state("conflict_engine", json.dumps(conflict.to_dict()))
+        await persistent.set_state("memory_manager", json.dumps(memory.to_dict()))
+        
+        # 4. Simpan juga role flags dan conversation terakhir
+        for role_id, role in role_manager.roles.items():
+            await persistent.set_state(f"role_{role_id}_conversations", json.dumps(role.conversations[-20:]))
+        
+        logger.info(f"💾 Session paused for user {user_id}, all states saved")
+        
+    except ImportError as e:
+        logger.error(f"Import error during pause: {e}")
+        await update.message.reply_text(
+            "❌ **Error: Module tidak ditemukan.**\n\n"
+            "Pastikan semua file sudah lengkap.",
+            parse_mode="Markdown"
+        )
+        return
+    except Exception as e:
+        logger.error(f"Error saving state during pause: {e}")
+        await update.message.reply_text(
+            "⚠️ **Gagal menyimpan sesi.**\n\n"
+            f"Error: {str(e)[:100]}\n\n"
+            "Progress mungkin tidak tersimpan sepenuhnya.",
+            parse_mode="Markdown"
+        )
+        return
     
     await update.message.reply_text(
         "⏸️ **Sesi Dihentikan Sementara**\n\n"
@@ -568,6 +603,61 @@ async def resume_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💜 Tidak ada sesi yang di-pause.")
         return
     
+    # Load state yang tersimpan
+    try:
+        from memory.persistent import get_persistent
+        from core.emotional import get_emotional_engine
+        from core.relationship import get_relationship_manager
+        from core.conflict import get_conflict_engine
+        from core.memory import get_memory_manager
+        from core.world import get_world_state
+        from roles.manager import get_role_manager
+        import json
+        
+        persistent = await get_persistent()
+        
+        # Load emotional engine
+        emo_data = await persistent.get_state("emotional_engine")
+        if emo_data:
+            emo = get_emotional_engine()
+            emo.from_dict(json.loads(emo_data))
+        
+        # Load relationship manager
+        rel_data = await persistent.get_state("relationship_manager")
+        if rel_data:
+            rel = get_relationship_manager()
+            rel.from_dict(json.loads(rel_data))
+        
+        # Load conflict engine
+        conflict_data = await persistent.get_state("conflict_engine")
+        if conflict_data:
+            conflict = get_conflict_engine()
+            conflict.from_dict(json.loads(conflict_data))
+        
+        # Load memory manager
+        memory_data = await persistent.get_state("memory_manager")
+        if memory_data:
+            memory = get_memory_manager()
+            memory.from_dict(json.loads(memory_data), None, get_world_state())
+        
+        # Load world state
+        world = get_world_state()
+        await persistent.load_world_state(world)
+        
+        # Load role states
+        role_manager = get_role_manager()
+        await role_manager.load_all(persistent)
+        
+        logger.info(f"💾 Session resumed for user {user_id}, states loaded")
+        
+    except Exception as e:
+        logger.error(f"Error loading state during resume: {e}")
+        await update.message.reply_text(
+            "⚠️ **Gagal memuat sesi.**\n\n"
+            "Memulai sesi baru.",
+            parse_mode="Markdown"
+        )
+    
     clear_user_mode(user_id)
     
     # Update activity
@@ -580,7 +670,6 @@ async def resume_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Ketik **/nova** untuk chat dengan Nova.",
         parse_mode="Markdown"
     )
-
 
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler /backup - Backup manual database"""
