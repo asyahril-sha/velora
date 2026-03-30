@@ -4,8 +4,11 @@ Semua data disimpan ke SQLite database.
 Tidak hilang saat restart.
 - State per role (emotional, relationship, conflict)
 - Memory (short-term, long-term, timeline)
-- World state
+- World state (drama, relationship status, role awareness)
 - Conversation history
+- Location visits tracking
+- Backup system
+- Cleanup old data
 """
 
 import time
@@ -13,6 +16,7 @@ import json
 import aiosqlite
 import logging
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
@@ -60,177 +64,212 @@ class PersistentMemory:
     
     async def init(self) -> None:
         """Buat semua tabel database"""
-        self._conn = await aiosqlite.connect(str(self.db_path))
-        self._conn.row_factory = aiosqlite.Row
-        
-        await self._conn.execute("PRAGMA journal_mode=WAL;")
-        await self._conn.execute("PRAGMA synchronous=NORMAL;")
-        await self._conn.execute("PRAGMA busy_timeout=5000;")
-        
-        # ========== TABEL STATE UTAMA ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS velora_state (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL WORLD STATE ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS world_state (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                relationship_status TEXT NOT NULL,
-                drama_level REAL NOT NULL,
-                public_knowledge TEXT NOT NULL,
-                role_awareness TEXT NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL EMOTIONAL STATE PER ROLE ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS emotional_state (
-                role_id TEXT PRIMARY KEY,
-                sayang REAL NOT NULL,
-                rindu REAL NOT NULL,
-                trust REAL NOT NULL,
-                mood REAL NOT NULL,
-                desire REAL NOT NULL,
-                arousal REAL NOT NULL,
-                tension REAL NOT NULL,
-                cemburu REAL NOT NULL,
-                kecewa REAL NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL RELATIONSHIP STATE PER ROLE ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS relationship_state (
-                role_id TEXT PRIMARY KEY,
-                phase TEXT NOT NULL,
-                level INTEGER NOT NULL,
-                interaction_count INTEGER NOT NULL,
-                milestones TEXT NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL CONFLICT STATE PER ROLE ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS conflict_state (
-                role_id TEXT PRIMARY KEY,
-                cemburu REAL NOT NULL,
-                kecewa REAL NOT NULL,
-                marah REAL NOT NULL,
-                sakit_hati REAL NOT NULL,
-                is_cold_war INTEGER NOT NULL,
-                is_waiting_for_apology INTEGER NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL ROLE FLAGS ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS role_flags (
-                role_id TEXT PRIMARY KEY,
-                flags TEXT NOT NULL,
-                updated_at REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL TIMELINE GLOBAL ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS timeline (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                waktu TEXT NOT NULL,
-                kejadian TEXT NOT NULL,
-                detail TEXT,
-                source TEXT NOT NULL,
-                role_id TEXT NOT NULL,
-                drama_impact REAL DEFAULT 0,
-                intimacy_phase TEXT,
-                location TEXT,
-                tags TEXT
-            )
-        ''')
-        
-        # ========== TABEL SHORT-TERM MEMORY ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS short_term_memory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                waktu TEXT NOT NULL,
-                kejadian TEXT NOT NULL,
-                detail TEXT,
-                source TEXT NOT NULL,
-                role_id TEXT NOT NULL,
-                drama_impact REAL DEFAULT 0
-            )
-        ''')
-        
-        # ========== TABEL LONG-TERM MEMORY ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS long_term_memory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tipe TEXT NOT NULL,
-                judul TEXT NOT NULL,
-                konten TEXT NOT NULL,
-                perasaan TEXT,
-                role_id TEXT NOT NULL,
-                importance INTEGER DEFAULT 5,
-                timestamp REAL NOT NULL
-            )
-        ''')
-        
-        # ========== TABEL ROLE KNOWLEDGE ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS role_knowledge (
-                role_id TEXT NOT NULL,
-                fact TEXT NOT NULL,
-                learned_at REAL NOT NULL,
-                PRIMARY KEY (role_id, fact)
-            )
-        ''')
-        
-        # ========== TABEL CONVERSATION ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS conversation (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                role TEXT NOT NULL,
-                message TEXT NOT NULL,
-                response TEXT,
-                user_id INTEGER
-            )
-        ''')
-        
-        # ========== TABEL LOCATION VISITS ==========
-        await self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS location_visits (
-                id TEXT PRIMARY KEY,
-                nama TEXT NOT NULL,
-                visit_count INTEGER DEFAULT 1,
-                last_visit REAL NOT NULL
-            )
-        ''')
-        
-        # ========== INDEXES ==========
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_role ON timeline(role_id)')
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_time ON timeline(timestamp)')
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_long_term_role ON long_term_memory(role_id)')
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_long_term_tipe ON long_term_memory(tipe)')
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_conversation_user ON conversation(user_id)')
-        await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_conversation_time ON conversation(timestamp)')
-        
-        await self._conn.commit()
-        
-        # Inisialisasi state awal
-        await self._init_state()
-        
-        logger.info(f"💾 Database initialized at {self.db_path}")
+        async with self._lock:
+            self._conn = await aiosqlite.connect(str(self.db_path))
+            self._conn.row_factory = aiosqlite.Row
+            
+            await self._conn.execute("PRAGMA journal_mode=WAL;")
+            await self._conn.execute("PRAGMA synchronous=NORMAL;")
+            await self._conn.execute("PRAGMA busy_timeout=5000;")
+            
+            # ========== TABEL STATE UTAMA ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS velora_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL WORLD STATE ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS world_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    relationship_status TEXT NOT NULL,
+                    drama_level REAL NOT NULL,
+                    public_knowledge TEXT NOT NULL,
+                    role_awareness TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL EMOTIONAL STATE PER ROLE ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS emotional_state (
+                    role_id TEXT PRIMARY KEY,
+                    sayang REAL NOT NULL,
+                    rindu REAL NOT NULL,
+                    trust REAL NOT NULL,
+                    mood REAL NOT NULL,
+                    desire REAL NOT NULL,
+                    arousal REAL NOT NULL,
+                    tension REAL NOT NULL,
+                    cemburu REAL NOT NULL,
+                    kecewa REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL RELATIONSHIP STATE PER ROLE ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS relationship_state (
+                    role_id TEXT PRIMARY KEY,
+                    phase TEXT NOT NULL,
+                    level INTEGER NOT NULL,
+                    interaction_count INTEGER NOT NULL,
+                    milestones TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL CONFLICT STATE PER ROLE ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS conflict_state (
+                    role_id TEXT PRIMARY KEY,
+                    cemburu REAL NOT NULL,
+                    kecewa REAL NOT NULL,
+                    marah REAL NOT NULL,
+                    sakit_hati REAL NOT NULL,
+                    is_cold_war INTEGER NOT NULL,
+                    is_waiting_for_apology INTEGER NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL ROLE FLAGS ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS role_flags (
+                    role_id TEXT PRIMARY KEY,
+                    flags TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL TIMELINE GLOBAL ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS timeline (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    waktu TEXT NOT NULL,
+                    kejadian TEXT NOT NULL,
+                    detail TEXT,
+                    source TEXT NOT NULL,
+                    role_id TEXT NOT NULL,
+                    drama_impact REAL DEFAULT 0,
+                    importance INTEGER DEFAULT 5,
+                    emotional_weight REAL DEFAULT 0,
+                    intimacy_phase TEXT,
+                    location TEXT,
+                    tags TEXT
+                )
+            ''')
+            
+            # ========== TABEL SHORT-TERM MEMORY ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS short_term_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    waktu TEXT NOT NULL,
+                    kejadian TEXT NOT NULL,
+                    detail TEXT,
+                    source TEXT NOT NULL,
+                    role_id TEXT NOT NULL,
+                    drama_impact REAL DEFAULT 0,
+                    importance INTEGER DEFAULT 5,
+                    emotional_weight REAL DEFAULT 0
+                )
+            ''')
+            
+            # ========== TABEL LONG-TERM MEMORY ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS long_term_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipe TEXT NOT NULL,
+                    judul TEXT NOT NULL,
+                    konten TEXT NOT NULL,
+                    perasaan TEXT,
+                    role_id TEXT NOT NULL,
+                    importance INTEGER DEFAULT 5,
+                    emotional_weight REAL DEFAULT 0,
+                    recall_count INTEGER DEFAULT 0,
+                    last_recalled REAL DEFAULT 0,
+                    timestamp REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL ROLE KNOWLEDGE ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS role_knowledge (
+                    role_id TEXT NOT NULL,
+                    fact TEXT NOT NULL,
+                    learned_at REAL NOT NULL,
+                    is_misunderstood INTEGER DEFAULT 0,
+                    PRIMARY KEY (role_id, fact)
+                )
+            ''')
+            
+            # ========== TABEL CONVERSATION ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS conversation (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    role TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    response TEXT,
+                    user_id INTEGER,
+                    context_snapshot TEXT
+                )
+            ''')
+            
+            # ========== TABEL LOCATION VISITS ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS location_visits (
+                    id TEXT PRIMARY KEY,
+                    nama TEXT NOT NULL,
+                    visit_count INTEGER DEFAULT 1,
+                    last_visit REAL NOT NULL
+                )
+            ''')
+            
+            # ========== TABEL DRAMA HISTORY ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS drama_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    source TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    old_level REAL NOT NULL,
+                    new_level REAL NOT NULL,
+                    reason TEXT
+                )
+            ''')
+            
+            # ========== TABEL PROACTIVE HISTORY ==========
+            await self._conn.execute('''
+                CREATE TABLE IF NOT EXISTS proactive_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    message TEXT NOT NULL,
+                    response TEXT
+                )
+            ''')
+            
+            # ========== INDEXES ==========
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_role ON timeline(role_id)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_time ON timeline(timestamp)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_long_term_role ON long_term_memory(role_id)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_long_term_tipe ON long_term_memory(tipe)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_conversation_user ON conversation(user_id)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_conversation_time ON conversation(timestamp)')
+            await self._conn.execute('CREATE INDEX IF NOT EXISTS idx_drama_time ON drama_history(timestamp)')
+            
+            await self._conn.commit()
+            
+            # Inisialisasi state awal
+            await self._init_state()
+            
+            logger.info(f"💾 Database initialized at {self.db_path}")
     
     async def _init_state(self) -> None:
         """Inisialisasi state awal jika belum ada"""
@@ -259,18 +298,19 @@ class PersistentMemory:
     async def save_world_state(self, world) -> None:
         """Save world state ke database"""
         try:
-            await self._conn.execute('''
-                INSERT OR REPLACE INTO world_state 
-                (id, relationship_status, drama_level, public_knowledge, role_awareness, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?)
-            ''', (
-                world.relationship_status.value,
-                world.drama_level,
-                json.dumps(world.public_knowledge.to_dict() if hasattr(world.public_knowledge, 'to_dict') else world.public_knowledge),
-                json.dumps({rid: aw.to_dict() for rid, aw in world.role_awareness.items()}),
-                time.time()
-            ))
-            await self._conn.commit()
+            async with self._lock:
+                await self._conn.execute('''
+                    INSERT OR REPLACE INTO world_state 
+                    (id, relationship_status, drama_level, public_knowledge, role_awareness, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?)
+                ''', (
+                    world.relationship_status.value,
+                    world.drama_level,
+                    json.dumps(world.public_knowledge.to_dict() if hasattr(world.public_knowledge, 'to_dict') else world.public_knowledge),
+                    json.dumps({rid: aw.to_dict() for rid, aw in world.role_awareness.items()}),
+                    time.time()
+                ))
+                await self._conn.commit()
         except Exception as e:
             logger.error(f"Error saving world state: {e}")
     
@@ -282,7 +322,7 @@ class PersistentMemory:
             )
             row = await cursor.fetchone()
             if row:
-                from core.world import GlobalRelationshipStatus
+                from core.world import GlobalRelationshipStatus, RoleAwareness, AwarenessLevel, PublicKnowledge
                 world.relationship_status = GlobalRelationshipStatus(row[0])
                 world.drama_level = row[1]
                 
@@ -290,16 +330,19 @@ class PersistentMemory:
                 pk_data = json.loads(row[2])
                 if hasattr(world.public_knowledge, 'from_dict'):
                     world.public_knowledge.from_dict(pk_data)
+                else:
+                    world.public_knowledge = PublicKnowledge(**pk_data) if isinstance(pk_data, dict) else PublicKnowledge()
                 
                 # Load role awareness
                 awareness_data = json.loads(row[3])
-                from core.world import RoleAwareness, AwarenessLevel
                 for rid, aw_data in awareness_data.items():
                     world.role_awareness[rid] = RoleAwareness(
                         role_id=rid,
                         awareness_level=AwarenessLevel(aw_data.get('awareness_level', 'limited')),
                         known_facts=set(aw_data.get('known_facts', [])),
-                        last_updated=aw_data.get('last_updated', time.time())
+                        last_updated=aw_data.get('last_updated', time.time()),
+                        misunderstanding_count=aw_data.get('misunderstanding_count', 0),
+                        revelation_count=aw_data.get('revelation_count', 0)
                     )
                 return True
             return False
@@ -315,135 +358,144 @@ class PersistentMemory:
         """Save semua state role ke database"""
         role_id = role.id
         
-        # Emotional state
-        await self._conn.execute('''
-            INSERT OR REPLACE INTO emotional_state 
-            (role_id, sayang, rindu, trust, mood, desire, arousal, tension, cemburu, kecewa, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            role_id,
-            role.emotional.sayang,
-            role.emotional.rindu,
-            role.emotional.trust,
-            role.emotional.mood,
-            role.emotional.desire,
-            role.emotional.arousal,
-            role.emotional.tension,
-            role.emotional.cemburu,
-            role.emotional.kecewa,
-            time.time()
-        ))
-        
-        # Relationship state
-        await self._conn.execute('''
-            INSERT OR REPLACE INTO relationship_state 
-            (role_id, phase, level, interaction_count, milestones, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            role_id,
-            role.relationship.phase.value,
-            role.relationship.level,
-            role.relationship.interaction_count,
-            json.dumps(role.relationship.get_milestone_status()),
-            time.time()
-        ))
-        
-        # Conflict state
-        await self._conn.execute('''
-            INSERT OR REPLACE INTO conflict_state 
-            (role_id, cemburu, kecewa, marah, sakit_hati, is_cold_war, is_waiting_for_apology, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            role_id,
-            role.conflict.cemburu,
-            role.conflict.kecewa,
-            role.conflict.marah,
-            role.conflict.sakit_hati,
-            1 if role.conflict.is_cold_war else 0,
-            1 if role.conflict.is_waiting_for_apology else 0,
-            time.time()
-        ))
-        
-        # Role flags
-        await self._conn.execute('''
-            INSERT OR REPLACE INTO role_flags 
-            (role_id, flags, updated_at)
-            VALUES (?, ?, ?)
-        ''', (
-            role_id,
-            json.dumps(role.flags),
-            time.time()
-        ))
-        
-        await self._conn.commit()
+        try:
+            async with self._lock:
+                # Emotional state
+                await self._conn.execute('''
+                    INSERT OR REPLACE INTO emotional_state 
+                    (role_id, sayang, rindu, trust, mood, desire, arousal, tension, cemburu, kecewa, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    role_id,
+                    role.emotional.sayang,
+                    role.emotional.rindu,
+                    role.emotional.trust,
+                    role.emotional.mood,
+                    role.emotional.desire,
+                    role.emotional.arousal,
+                    role.emotional.tension,
+                    role.emotional.cemburu,
+                    role.emotional.kecewa,
+                    time.time()
+                ))
+                
+                # Relationship state
+                await self._conn.execute('''
+                    INSERT OR REPLACE INTO relationship_state 
+                    (role_id, phase, level, interaction_count, milestones, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    role_id,
+                    role.relationship.phase.value,
+                    role.relationship.level,
+                    role.relationship.interaction_count,
+                    json.dumps(role.relationship.get_milestone_status()),
+                    time.time()
+                ))
+                
+                # Conflict state
+                await self._conn.execute('''
+                    INSERT OR REPLACE INTO conflict_state 
+                    (role_id, cemburu, kecewa, marah, sakit_hati, is_cold_war, is_waiting_for_apology, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    role_id,
+                    role.conflict.cemburu,
+                    role.conflict.kecewa,
+                    role.conflict.marah,
+                    role.conflict.sakit_hati,
+                    1 if role.conflict.is_cold_war else 0,
+                    1 if role.conflict.is_waiting_for_apology else 0,
+                    time.time()
+                ))
+                
+                # Role flags
+                await self._conn.execute('''
+                    INSERT OR REPLACE INTO role_flags 
+                    (role_id, flags, updated_at)
+                    VALUES (?, ?, ?)
+                ''', (
+                    role_id,
+                    json.dumps(role.flags),
+                    time.time()
+                ))
+                
+                await self._conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving role state for {role_id}: {e}")
     
     async def load_role_state(self, role) -> bool:
         """Load semua state role dari database"""
         role_id = role.id
         loaded = False
         
-        # Load emotional state
-        cursor = await self._conn.execute(
-            "SELECT sayang, rindu, trust, mood, desire, arousal, tension, cemburu, kecewa FROM emotional_state WHERE role_id = ?",
-            (role_id,)
-        )
-        row = await cursor.fetchone()
-        if row:
-            role.emotional.sayang = row[0]
-            role.emotional.rindu = row[1]
-            role.emotional.trust = row[2]
-            role.emotional.mood = row[3]
-            role.emotional.desire = row[4]
-            role.emotional.arousal = row[5]
-            role.emotional.tension = row[6]
-            role.emotional.cemburu = row[7]
-            role.emotional.kecewa = row[8]
-            loaded = True
-        
-        # Load relationship state
-        cursor = await self._conn.execute(
-            "SELECT phase, level, interaction_count, milestones FROM relationship_state WHERE role_id = ?",
-            (role_id,)
-        )
-        row = await cursor.fetchone()
-        if row:
-            from core.relationship import RelationshipPhase
-            role.relationship.phase = RelationshipPhase(row[0])
-            role.relationship.level = row[1]
-            role.relationship.interaction_count = row[2]
+        try:
+            # Load emotional state
+            cursor = await self._conn.execute(
+                "SELECT sayang, rindu, trust, mood, desire, arousal, tension, cemburu, kecewa FROM emotional_state WHERE role_id = ?",
+                (role_id,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                role.emotional.sayang = row[0]
+                role.emotional.rindu = row[1]
+                role.emotional.trust = row[2]
+                role.emotional.mood = row[3]
+                role.emotional.desire = row[4]
+                role.emotional.arousal = row[5]
+                role.emotional.tension = row[6]
+                role.emotional.cemburu = row[7]
+                role.emotional.kecewa = row[8]
+                loaded = True
             
-            milestones = json.loads(row[3])
-            for name, achieved in milestones.items():
-                if name in role.relationship.milestones:
-                    role.relationship.milestones[name].achieved = achieved
-            loaded = True
-        
-        # Load conflict state
-        cursor = await self._conn.execute(
-            "SELECT cemburu, kecewa, marah, sakit_hati, is_cold_war, is_waiting_for_apology FROM conflict_state WHERE role_id = ?",
-            (role_id,)
-        )
-        row = await cursor.fetchone()
-        if row:
-            role.conflict.cemburu = row[0]
-            role.conflict.kecewa = row[1]
-            role.conflict.marah = row[2]
-            role.conflict.sakit_hati = row[3]
-            role.conflict.is_cold_war = bool(row[4])
-            role.conflict.is_waiting_for_apology = bool(row[5])
-            loaded = True
-        
-        # Load role flags
-        cursor = await self._conn.execute(
-            "SELECT flags FROM role_flags WHERE role_id = ?",
-            (role_id,)
-        )
-        row = await cursor.fetchone()
-        if row:
-            role.flags = json.loads(row[0])
-            loaded = True
-        
-        return loaded
+            # Load relationship state
+            cursor = await self._conn.execute(
+                "SELECT phase, level, interaction_count, milestones FROM relationship_state WHERE role_id = ?",
+                (role_id,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                from core.relationship import RelationshipPhase
+                role.relationship.phase = RelationshipPhase(row[0])
+                role.relationship.level = row[1]
+                role.relationship.interaction_count = row[2]
+                
+                milestones = json.loads(row[3])
+                for name, achieved in milestones.items():
+                    if name in role.relationship.milestones:
+                        role.relationship.milestones[name].achieved = achieved
+                loaded = True
+            
+            # Load conflict state
+            cursor = await self._conn.execute(
+                "SELECT cemburu, kecewa, marah, sakit_hati, is_cold_war, is_waiting_for_apology FROM conflict_state WHERE role_id = ?",
+                (role_id,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                role.conflict.cemburu = row[0]
+                role.conflict.kecewa = row[1]
+                role.conflict.marah = row[2]
+                role.conflict.sakit_hati = row[3]
+                role.conflict.is_cold_war = bool(row[4])
+                role.conflict.is_waiting_for_apology = bool(row[5])
+                loaded = True
+            
+            # Load role flags
+            cursor = await self._conn.execute(
+                "SELECT flags FROM role_flags WHERE role_id = ?",
+                (role_id,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                role.flags = json.loads(row[0])
+                loaded = True
+            
+            return loaded
+            
+        except Exception as e:
+            logger.error(f"Error loading role state for {role_id}: {e}")
+            return False
     
     # =========================================================================
     # MEMORY
@@ -452,38 +504,11 @@ class PersistentMemory:
     async def save_timeline_event(self, event) -> None:
         """Save timeline event ke database"""
         try:
-            await self._conn.execute('''
-                INSERT INTO timeline 
-                (timestamp, waktu, kejadian, detail, source, role_id, drama_impact, intimacy_phase, location, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                event.timestamp,
-                event.waktu,
-                event.kejadian[:500],
-                event.detail[:500] if event.detail else "",
-                event.source,
-                event.role_id,
-                event.drama_impact,
-                event.intimacy_phase,
-                event.location,
-                json.dumps(list(event.tags)) if event.tags else None
-            ))
-            await self._conn.commit()
-        except Exception as e:
-            logger.error(f"Error saving timeline event: {e}")
-    
-    async def save_short_term(self, events: List) -> None:
-        """Save short-term memory (replace semua)"""
-        try:
-            # Clear existing
-            await self._conn.execute("DELETE FROM short_term_memory")
-            
-            # Insert new
-            for event in events:
+            async with self._lock:
                 await self._conn.execute('''
-                    INSERT INTO short_term_memory 
-                    (timestamp, waktu, kejadian, detail, source, role_id, drama_impact)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO timeline 
+                    (timestamp, waktu, kejadian, detail, source, role_id, drama_impact, importance, emotional_weight, intimacy_phase, location, tags)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     event.timestamp,
                     event.waktu,
@@ -491,30 +516,67 @@ class PersistentMemory:
                     event.detail[:500] if event.detail else "",
                     event.source,
                     event.role_id,
-                    event.drama_impact
+                    event.drama_impact,
+                    event.importance,
+                    event.emotional_weight,
+                    event.intimacy_phase,
+                    event.location,
+                    json.dumps(list(event.tags)) if event.tags else None
                 ))
-            
-            await self._conn.commit()
+                await self._conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving timeline event: {e}")
+    
+    async def save_short_term(self, events: List) -> None:
+        """Save short-term memory (replace semua)"""
+        try:
+            async with self._lock:
+                # Clear existing
+                await self._conn.execute("DELETE FROM short_term_memory")
+                
+                # Insert new
+                for event in events:
+                    await self._conn.execute('''
+                        INSERT INTO short_term_memory 
+                        (timestamp, waktu, kejadian, detail, source, role_id, drama_impact, importance, emotional_weight)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        event.timestamp,
+                        event.waktu,
+                        event.kejadian[:500],
+                        event.detail[:500] if event.detail else "",
+                        event.source,
+                        event.role_id,
+                        event.drama_impact,
+                        event.importance,
+                        event.emotional_weight
+                    ))
+                
+                await self._conn.commit()
         except Exception as e:
             logger.error(f"Error saving short-term memory: {e}")
     
     async def save_long_term_memory(self, memory) -> None:
         """Save long-term memory"""
         try:
-            await self._conn.execute('''
-                INSERT INTO long_term_memory 
-                (tipe, judul, konten, perasaan, role_id, importance, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                memory.tipe,
-                memory.judul[:200],
-                memory.konten[:500],
-                memory.perasaan[:100],
-                memory.role_id,
-                memory.importance,
-                memory.timestamp
-            ))
-            await self._conn.commit()
+            async with self._lock:
+                await self._conn.execute('''
+                    INSERT INTO long_term_memory 
+                    (tipe, judul, konten, perasaan, role_id, importance, emotional_weight, recall_count, last_recalled, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    memory.tipe,
+                    memory.judul[:200],
+                    memory.konten[:500],
+                    memory.perasaan[:100],
+                    memory.role_id,
+                    memory.importance,
+                    memory.emotional_weight,
+                    memory.recall_count,
+                    memory.last_recalled,
+                    memory.timestamp
+                ))
+                await self._conn.commit()
         except Exception as e:
             logger.error(f"Error saving long-term memory: {e}")
     
@@ -523,51 +585,60 @@ class PersistentMemory:
         cursor = await self._conn.execute('''
             SELECT * FROM long_term_memory 
             WHERE role_id = ? OR role_id = 'nova'
-            ORDER BY importance DESC, timestamp DESC
+            ORDER BY (importance * emotional_weight) DESC, timestamp DESC
             LIMIT ?
         ''', (role_id, limit))
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
     
-    async def save_role_knowledge(self, role_id: str, facts: List[str]) -> None:
+    async def save_role_knowledge(self, role_id: str, facts: List[Dict]) -> None:
         """Save role knowledge"""
         try:
-            # Clear existing
-            await self._conn.execute("DELETE FROM role_knowledge WHERE role_id = ?", (role_id,))
-            
-            # Insert new
-            now = time.time()
-            for fact in facts:
-                await self._conn.execute('''
-                    INSERT INTO role_knowledge (role_id, fact, learned_at)
-                    VALUES (?, ?, ?)
-                ''', (role_id, fact[:200], now))
-            
-            await self._conn.commit()
+            async with self._lock:
+                # Clear existing
+                await self._conn.execute("DELETE FROM role_knowledge WHERE role_id = ?", (role_id,))
+                
+                # Insert new
+                now = time.time()
+                for fact_data in facts:
+                    if isinstance(fact_data, dict):
+                        fact = fact_data.get('fact', '')
+                        is_misunderstood = 1 if fact_data.get('is_misunderstood', False) else 0
+                    else:
+                        fact = fact_data
+                        is_misunderstood = 0
+                    
+                    await self._conn.execute('''
+                        INSERT INTO role_knowledge (role_id, fact, learned_at, is_misunderstood)
+                        VALUES (?, ?, ?, ?)
+                    ''', (role_id, fact[:200], now, is_misunderstood))
+                
+                await self._conn.commit()
         except Exception as e:
             logger.error(f"Error saving role knowledge: {e}")
     
-    async def load_role_knowledge(self, role_id: str) -> List[str]:
+    async def load_role_knowledge(self, role_id: str) -> List[Dict]:
         """Load role knowledge"""
         cursor = await self._conn.execute(
-            "SELECT fact FROM role_knowledge WHERE role_id = ? ORDER BY learned_at DESC",
+            "SELECT fact, learned_at, is_misunderstood FROM role_knowledge WHERE role_id = ? ORDER BY learned_at DESC",
             (role_id,)
         )
         rows = await cursor.fetchall()
-        return [row[0] for row in rows]
+        return [{'fact': row[0], 'learned_at': row[1], 'is_misunderstood': bool(row[2])} for row in rows]
     
     # =========================================================================
     # CONVERSATION
     # =========================================================================
     
-    async def save_conversation(self, role: str, message: str, response: str = "", user_id: int = None) -> None:
+    async def save_conversation(self, role: str, message: str, response: str = "", user_id: int = None, context: Dict = None) -> None:
         """Save conversation ke database"""
         try:
-            await self._conn.execute('''
-                INSERT INTO conversation (timestamp, role, message, response, user_id)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (time.time(), role, message[:1000], response[:1000], user_id))
-            await self._conn.commit()
+            async with self._lock:
+                await self._conn.execute('''
+                    INSERT INTO conversation (timestamp, role, message, response, user_id, context_snapshot)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (time.time(), role, message[:1000], response[:1000], user_id, json.dumps(context) if context else None))
+                await self._conn.commit()
         except Exception as e:
             logger.error(f"Error saving conversation: {e}")
     
@@ -589,18 +660,59 @@ class PersistentMemory:
         return [dict(row) for row in rows][::-1]
     
     # =========================================================================
+    # DRAMA HISTORY
+    # =========================================================================
+    
+    async def save_drama_event(self, source: str, amount: float, old_level: float, new_level: float, reason: str) -> None:
+        """Save drama event ke database"""
+        try:
+            async with self._lock:
+                await self._conn.execute('''
+                    INSERT INTO drama_history (timestamp, source, amount, old_level, new_level, reason)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (time.time(), source, amount, old_level, new_level, reason[:200]))
+                await self._conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving drama event: {e}")
+    
+    async def get_drama_history(self, limit: int = 50) -> List[Dict]:
+        """Get drama history"""
+        cursor = await self._conn.execute('''
+            SELECT * FROM drama_history ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows][::-1]
+    
+    # =========================================================================
+    # PROACTIVE HISTORY
+    # =========================================================================
+    
+    async def save_proactive_message(self, user_id: int, message: str, response: str) -> None:
+        """Save proactive message ke database"""
+        try:
+            async with self._lock:
+                await self._conn.execute('''
+                    INSERT INTO proactive_history (timestamp, user_id, message, response)
+                    VALUES (?, ?, ?, ?)
+                ''', (time.time(), user_id, message[:500], response[:500]))
+                await self._conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving proactive message: {e}")
+    
+    # =========================================================================
     # LOCATION
     # =========================================================================
     
     async def save_location_visit(self, location_id: str, nama: str) -> None:
         """Save location visit"""
         now = time.time()
-        await self._conn.execute('''
-            INSERT INTO location_visits (id, nama, visit_count, last_visit)
-            VALUES (?, ?, 1, ?)
-            ON CONFLICT(id) DO UPDATE SET visit_count = visit_count + 1, last_visit = ?
-        ''', (location_id, nama, now, now))
-        await self._conn.commit()
+        async with self._lock:
+            await self._conn.execute('''
+                INSERT INTO location_visits (id, nama, visit_count, last_visit)
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(id) DO UPDATE SET visit_count = visit_count + 1, last_visit = ?
+            ''', (location_id, nama, now, now))
+            await self._conn.commit()
     
     # =========================================================================
     # STATE UTILITY
@@ -614,11 +726,12 @@ class PersistentMemory:
     
     async def set_state(self, key: str, value: str) -> None:
         """Set state by key"""
-        await self._conn.execute(
-            "INSERT OR REPLACE INTO velora_state (key, value, updated_at) VALUES (?, ?, ?)",
-            (key, value, time.time())
-        )
-        await self._conn.commit()
+        async with self._lock:
+            await self._conn.execute(
+                "INSERT OR REPLACE INTO velora_state (key, value, updated_at) VALUES (?, ?, ?)",
+                (key, value, time.time())
+            )
+            await self._conn.commit()
     
     # =========================================================================
     # BACKUP & CLEANUP
@@ -627,7 +740,6 @@ class PersistentMemory:
     async def create_backup(self, backup_path: Path) -> bool:
         """Create database backup"""
         try:
-            import shutil
             shutil.copy(self.db_path, backup_path)
             logger.info(f"💾 Backup created: {backup_path}")
             return True
@@ -639,24 +751,33 @@ class PersistentMemory:
         """Cleanup data lebih dari days hari"""
         cutoff = time.time() - (days * 24 * 3600)
         
-        # Cleanup timeline
-        await self._conn.execute("DELETE FROM timeline WHERE timestamp < ?", (cutoff,))
-        
-        # Cleanup conversation
-        await self._conn.execute("DELETE FROM conversation WHERE timestamp < ?", (cutoff,))
-        
-        await self._conn.commit()
-        logger.info(f"🧹 Cleaned up data older than {days} days")
+        async with self._lock:
+            # Cleanup timeline
+            await self._conn.execute("DELETE FROM timeline WHERE timestamp < ?", (cutoff,))
+            
+            # Cleanup conversation
+            await self._conn.execute("DELETE FROM conversation WHERE timestamp < ?", (cutoff,))
+            
+            # Cleanup drama history
+            await self._conn.execute("DELETE FROM drama_history WHERE timestamp < ?", (cutoff,))
+            
+            # Cleanup proactive history
+            await self._conn.execute("DELETE FROM proactive_history WHERE timestamp < ?", (cutoff,))
+            
+            await self._conn.commit()
+            logger.info(f"🧹 Cleaned up data older than {days} days")
     
     async def vacuum(self) -> None:
         """Vacuum database"""
-        await self._conn.execute("VACUUM")
-        logger.info("🧹 Database vacuumed")
+        async with self._lock:
+            await self._conn.execute("VACUUM")
+            logger.info("🧹 Database vacuumed")
     
     async def get_stats(self) -> Dict:
         """Get database statistics"""
         stats = {}
-        tables = ['timeline', 'short_term_memory', 'long_term_memory', 'conversation', 'location_visits']
+        tables = ['timeline', 'short_term_memory', 'long_term_memory', 'conversation', 
+                  'location_visits', 'drama_history', 'proactive_history']
         
         for table in tables:
             cursor = await self._conn.execute(f"SELECT COUNT(*) FROM {table}")
@@ -691,7 +812,15 @@ async def get_persistent() -> PersistentMemory:
     return _persistent
 
 
+def reset_persistent() -> None:
+    """Reset persistent memory instance (for testing)"""
+    global _persistent
+    _persistent = None
+    logger.info("🔄 Persistent Memory reset")
+
+
 __all__ = [
     'PersistentMemory',
-    'get_persistent'
+    'get_persistent',
+    'reset_persistent'
 ]
