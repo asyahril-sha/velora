@@ -41,6 +41,13 @@
 - Auto scene untuk provider (HJ, BJ, petting)
 - **Brutal mode di level 11-12** - semua kata vulgar bebas
 
+###🔥 BRUTAL MODE - LEVEL 11-12
+Di level 11-12, VELORA akan menggunakan BRUTAL MODE:
+- Semua kata vulgar diperbolehkan: kontol, memek, ngentot, crot, sperma, fuck, shit, damn
+- Deskripsi sensual yang vivid dan memicu respons fisik
+- Gesture eksplisit: kontol masuk dalam, memek basah, sperma keluar
+- Tujuan: membuat user HORNY, MASTURBASI, dan ORGASME
+
 ### 💾 Memory System
 - Short-term memory (50 kejadian terakhir)
 - Long-term memory (kebiasaan, momen penting, janji)
