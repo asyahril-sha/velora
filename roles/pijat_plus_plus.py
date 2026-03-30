@@ -98,8 +98,13 @@ class PijatPlusPlusRole(ServiceProviderBase):
         # Timer untuk auto end setelah climax
         self.climax_count_start = 0
         self.service_end_timer = None
-        
+
         logger.info(f"💆‍♀️ Pijat++ {name} initialized | Boob: {boob_size} | Hijab: {hijab} | Style: {pijat_style}")
+
+    def initialize(self, memory_manager):
+        """Initialize dengan memory manager"""
+        self._memory_manager = memory_manager
+        logger.info(f"🔗 Pijat++ {self.name} connected to MemoryManager")
     
     # =========================================================================
     # SERVICE DESCRIPTION
