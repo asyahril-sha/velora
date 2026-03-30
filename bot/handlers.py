@@ -21,6 +21,7 @@ from core.world import get_world_state
 from core.memory import get_memory_manager
 from roles.manager import get_role_manager
 from worker.background import get_worker
+from telegram.helpers import escape_markdown
 
 logger = logging.getLogger(__name__)
 
