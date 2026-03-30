@@ -208,13 +208,22 @@ Ketik **/batal** untuk kembali ke Nova.
             del self.user_active_role[user_id]
     
     # =========================================================================
-    # MESSAGE PROCESSING
+    # LAZY IMPORT UNTUK HINDARI CIRCULAR IMPORT
+    # =========================================================================
+    
+    async def _get_orchestrator(self):
+        """Lazy import untuk menghindari circular import"""
+        from core.orchestrator import get_orchestrator
+        return await get_orchestrator()
+    
+    # =========================================================================
+    # MESSAGE PROCESSING (FULL AI INTEGRATION)
     # =========================================================================
     
     async def process_message(self, role_id: str, message: str, user_id: int = None) -> str:
         """
         Proses pesan untuk role tertentu.
-        Ini adalah method utama untuk interaksi.
+        Method utama untuk interaksi dengan AI.
         """
         role = self.get_role(role_id)
         if not role:
@@ -294,39 +303,6 @@ Ketik **/batal** untuk kembali ke Nova.
             elif msg_lower == "/deal_sex":
                 if hasattr(role, 'confirm_extra_service'):
                     return role.confirm_extra_service("sex", role.sex_price_final)
-
-        # ========== UPDATE STATE DARI PESAN ==========
-        update_result = role.update_from_message(message)
-    
-        # Cek level up
-        if update_result.get('level_up'):
-            level_baru = update_result.get('new_level', role.relationship.level)
-            notif = f"✨ **Level naik ke {level_baru}/12!** ✨\n\n"
-        else:
-            notif = ""
-    
-        # Save conversation
-        role.add_conversation(message, "")
-    
-        # ========== GENERATE AI RESPONSE ==========
-        try:
-            # Dapatkan context dari memory jika ada
-            context = None
-            if self._memory_manager:
-                context = self._memory_manager.get_context_for_role(role_id)
-        
-            # Panggil AI
-            response = await role.generate_response(message, context)
-        
-            # Save response ke conversation
-            if role.conversations:
-                role.conversations[-1]['role'] = response[:200]
-        
-            return notif + response
-        
-        except Exception as e:
-            logger.error(f"Error generating response for {role_id}: {e}")
-            return notif + role.get_greeting()
         
         # ========== INTIMATE PHASE COMMANDS (untuk pelacur) ==========
         if hasattr(role, 'session_phase') and role.session_phase == "intimate_phase":
@@ -358,19 +334,26 @@ Ketik **/batal** untuk kembali ke Nova.
         # Save conversation
         role.add_conversation(message, "")
         
-        # Generate response (akan dioverride di subclass dengan AI)
-        # Untuk sementara return greeting atau fallback
-        if role.conversations and len(role.conversations) > 1:
-            # Ini akan diganti dengan AI response nanti
-            response = await role.generate_response(message)
-        else:
-            response = role.get_greeting()
-        
-        # Save response ke conversation
-        if role.conversations:
-            role.conversations[-1]['role'] = response[:200]
-        
-        return notif + response
+        # ========== GENERATE AI RESPONSE ==========
+        try:
+            # Dapatkan context dari memory jika ada
+            context = None
+            if self._memory_manager:
+                context = self._memory_manager.get_context_for_role(role_id)
+            
+            # Panggil AI untuk generate response
+            response = await role.generate_response(message, context)
+            
+            # Save response ke conversation
+            if role.conversations:
+                role.conversations[-1]['role'] = response[:200]
+            
+            return notif + response
+            
+        except Exception as e:
+            logger.error(f"Error generating response for {role_id}: {e}", exc_info=True)
+            # Fallback ke greeting
+            return notif + role.get_greeting()
     
     # =========================================================================
     # AUTO SCENE MANAGEMENT
@@ -504,6 +487,43 @@ Ketik **/batal** untuk kembali ke Nova.
         
         lines.append("")
         lines.append("Ketik **/batal** untuk kembali ke Nova.")
+        
+        return "\n".join(lines)
+    
+    def get_stats(self) -> Dict:
+        """Dapatkan statistik role manager"""
+        total_roles = len(self.roles)
+        role_types = {}
+        for role in self.roles.values():
+            rt = role.role_type
+            role_types[rt] = role_types.get(rt, 0) + 1
+        
+        return {
+            'total_roles': total_roles,
+            'role_types': role_types,
+            'active_sessions': len(self.user_active_role),
+            'active_role': self.active_role
+        }
+    
+    def format_status(self) -> str:
+        """Format status role manager untuk display"""
+        stats = self.get_stats()
+        
+        lines = [
+            "╔══════════════════════════════════════════════════════════════╗",
+            "║                    🎭 ROLE MANAGER                           ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            f"║ TOTAL ROLES: {stats['total_roles']}                                      ║",
+            f"║ ACTIVE SESSIONS: {stats['active_sessions']}                                   ║",
+            f"║ ACTIVE ROLE: {stats['active_role'] or 'None'}                                         ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            "║ ROLE TYPES:                                                ║"
+        ]
+        
+        for rt, count in stats['role_types'].items():
+            lines.append(f"║   {rt}: {count}                                         ║")
+        
+        lines.append("╚══════════════════════════════════════════════════════════════╝")
         
         return "\n".join(lines)
 
