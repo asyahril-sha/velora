@@ -9,14 +9,17 @@ Menjalankan task-task periodic di background:
 - Auto scene (untuk provider: pijat++, pelacur)
 - Auto backup database
 - Booking expiry check
+- Session timeout check
+- Drama decay
+- Personality drift update
 """
 
 import asyncio
 import time
 import logging
 import random
+from typing import Optional, Dict, List, Any, Callable
 from datetime import datetime
-from typing import Optional, Dict, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -33,41 +36,65 @@ class VeloraWorker:
     
     def __init__(self):
         self.is_running = False
-        self.tasks: list[asyncio.Task] = []
+        self.tasks: List[asyncio.Task] = []
         
         # ========== INTERVAL (detik) ==========
         self.rindu_interval = 1800      # 30 menit
         self.conflict_interval = 1800   # 30 menit
         self.mood_interval = 3600       # 1 jam
+        self.drama_interval = 1800      # 30 menit
         self.save_interval = 60         # 1 menit
         self.proactive_interval = 300   # 5 menit
         self.auto_scene_interval = 15   # 15 detik
         self.booking_check_interval = 60  # 1 menit
+        self.session_timeout_interval = 300  # 5 menit
+        self.personality_interval = 3600  # 1 jam
         self.backup_interval = 21600    # 6 jam
         
         # ========== LAST RUN TIMES ==========
         self.last_rindu_run = 0
         self.last_conflict_run = 0
         self.last_mood_run = 0
+        self.last_drama_run = 0
         self.last_save_run = 0
         self.last_proactive_run = 0
         self.last_auto_scene_run = 0
         self.last_booking_check_run = 0
+        self.last_session_timeout_run = 0
+        self.last_personality_run = 0
         self.last_backup_run = 0
         
         # ========== REFERENCES ==========
         self._application = None
-        self._user_ids: list[int] = []
+        self._user_ids: List[int] = []
         self._get_orchestrator = None
         self._get_persistent = None
         self._get_emotional_engine = None
         self._get_relationship_manager = None
         self._get_conflict_engine = None
         self._get_brain = None
+        self._get_world = None
+        self._get_role_manager = None
         
         # ========== PROACTIVE COOLDOWN PER USER ==========
         self._proactive_cooldown: Dict[int, float] = {}
         self._proactive_cooldown_seconds = 3600  # 1 jam
+        
+        # ========== SESSION TIMEOUT ==========
+        self._session_timeout_seconds = 1800  # 30 menit
+        self._last_activity: Dict[int, float] = {}
+        
+        # ========== STATISTICS ==========
+        self._rindu_updates = 0
+        self._conflict_decays = 0
+        self._mood_recoveries = 0
+        self._drama_decays = 0
+        self._auto_saves = 0
+        self._proactive_sent = 0
+        self._auto_scenes_sent = 0
+        self._bookings_expired = 0
+        self._sessions_timeout = 0
+        self._backups_created = 0
         
         logger.info("🔄 VeloraWorker initialized")
     
@@ -77,13 +104,15 @@ class VeloraWorker:
     
     def initialize(self, 
                    application=None,
-                   user_ids: list[int] = None,
+                   user_ids: List[int] = None,
                    get_orchestrator=None,
                    get_persistent=None,
                    get_emotional_engine=None,
                    get_relationship_manager=None,
                    get_conflict_engine=None,
-                   get_brain=None):
+                   get_brain=None,
+                   get_world=None,
+                   get_role_manager=None):
         """Initialize dengan references ke komponen lain"""
         self._application = application
         self._user_ids = user_ids or []
@@ -93,6 +122,12 @@ class VeloraWorker:
         self._get_relationship_manager = get_relationship_manager
         self._get_conflict_engine = get_conflict_engine
         self._get_brain = get_brain
+        self._get_world = get_world
+        self._get_role_manager = get_role_manager
+        
+        # Initialize last activity for users
+        for user_id in self._user_ids:
+            self._last_activity[user_id] = time.time()
         
         logger.info(f"🔧 VeloraWorker initialized with {len(self._user_ids)} users")
     
@@ -100,13 +135,20 @@ class VeloraWorker:
         """Tambah user ke daftar yang dipantau"""
         if user_id not in self._user_ids:
             self._user_ids.append(user_id)
+            self._last_activity[user_id] = time.time()
             logger.info(f"👤 User {user_id} added to worker monitoring")
     
     def remove_user(self, user_id: int) -> None:
         """Hapus user dari daftar yang dipantau"""
         if user_id in self._user_ids:
             self._user_ids.remove(user_id)
+            self._last_activity.pop(user_id, None)
+            self._proactive_cooldown.pop(user_id, None)
             logger.info(f"👤 User {user_id} removed from worker monitoring")
+    
+    def update_activity(self, user_id: int) -> None:
+        """Update last activity timestamp untuk user"""
+        self._last_activity[user_id] = time.time()
     
     # =========================================================================
     # START & STOP
@@ -125,10 +167,13 @@ class VeloraWorker:
             asyncio.create_task(self._rindu_loop()),
             asyncio.create_task(self._conflict_loop()),
             asyncio.create_task(self._mood_loop()),
+            asyncio.create_task(self._drama_loop()),
             asyncio.create_task(self._save_loop()),
             asyncio.create_task(self._proactive_loop()),
             asyncio.create_task(self._auto_scene_loop()),
             asyncio.create_task(self._booking_check_loop()),
+            asyncio.create_task(self._session_timeout_loop()),
+            asyncio.create_task(self._personality_loop()),
             asyncio.create_task(self._backup_loop()),
         ]
         
@@ -159,6 +204,7 @@ class VeloraWorker:
             if elapsed >= self.rindu_interval:
                 await self._update_rindu()
                 self.last_rindu_run = now
+                self._rindu_updates += 1
             
             await asyncio.sleep(60)
     
@@ -202,6 +248,7 @@ class VeloraWorker:
             if elapsed >= self.conflict_interval:
                 await self._decay_conflicts()
                 self.last_conflict_run = now
+                self._conflict_decays += 1
             
             await asyncio.sleep(60)
     
@@ -232,6 +279,7 @@ class VeloraWorker:
             if elapsed >= self.mood_interval:
                 await self._recover_mood()
                 self.last_mood_run = now
+                self._mood_recoveries += 1
             
             await asyncio.sleep(60)
     
@@ -258,6 +306,37 @@ class VeloraWorker:
             logger.error(f"Mood recovery error: {e}")
     
     # =========================================================================
+    # DRAMA DECAY LOOP
+    # =========================================================================
+    
+    async def _drama_loop(self) -> None:
+        """Drama decay setiap 30 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_drama_run
+            
+            if elapsed >= self.drama_interval:
+                await self._decay_drama()
+                self.last_drama_run = now
+                self._drama_decays += 1
+            
+            await asyncio.sleep(60)
+    
+    async def _decay_drama(self) -> None:
+        """Decay drama berdasarkan waktu"""
+        try:
+            if not self._get_world:
+                return
+            
+            world = self._get_world()
+            world.update_drama_decay(0.5)  # decay 30 menit = 0.5 jam
+            
+            logger.debug(f"📉 Drama decay: {world.drama_level:.1f}%")
+            
+        except Exception as e:
+            logger.error(f"Drama decay error: {e}")
+    
+    # =========================================================================
     # AUTO SAVE LOOP
     # =========================================================================
     
@@ -270,6 +349,7 @@ class VeloraWorker:
             if elapsed >= self.save_interval:
                 await self._save_all_states()
                 self.last_save_run = now
+                self._auto_saves += 1
             
             await asyncio.sleep(30)
     
@@ -297,10 +377,14 @@ class VeloraWorker:
                 await persistent.save_conflict_state(conflict)
             
             # Save world state
-            if self._get_orchestrator:
-                orchestrator = await self._get_orchestrator()
-                if orchestrator and orchestrator.world:
-                    await persistent.save_world_state(orchestrator.world)
+            if self._get_world:
+                world = self._get_world()
+                await persistent.save_world_state(world)
+            
+            # Save role states
+            if self._get_role_manager:
+                role_manager = self._get_role_manager()
+                await role_manager.save_all(persistent)
             
             logger.debug("💾 Autosave completed")
             
@@ -334,6 +418,11 @@ class VeloraWorker:
             if time.time() - last_proactive < self._proactive_cooldown_seconds:
                 continue
             
+            # Cek session timeout
+            if user_id in self._last_activity and time.time() - self._last_activity[user_id] > 300:
+                # User inactive > 5 menit, skip proactive
+                continue
+            
             try:
                 if not self._get_orchestrator:
                     continue
@@ -348,7 +437,13 @@ class VeloraWorker:
                         parse_mode='Markdown'
                     )
                     self._proactive_cooldown[user_id] = time.time()
+                    self._proactive_sent += 1
                     logger.info(f"💬 Proactive message sent to {user_id}")
+                    
+                    # Save to database
+                    if self._get_persistent:
+                        persistent = await self._get_persistent()
+                        await persistent.save_proactive_message(user_id, message, "")
                     
             except Exception as e:
                 logger.error(f"Proactive check error for {user_id}: {e}")
@@ -388,6 +483,7 @@ class VeloraWorker:
                         text=message,
                         parse_mode='Markdown'
                     )
+                    self._auto_scenes_sent += 1
                     logger.debug(f"🎬 Auto scene sent to {user_id}")
                     
             except Exception as e:
@@ -420,25 +516,102 @@ class VeloraWorker:
                     continue
                 
                 orchestrator = await self._get_orchestrator()
-                
-                # Dapatkan role aktif
-                active_role = orchestrator.get_active_role(user_id)
-                if not active_role:
-                    continue
-                
-                # Cek booking expiry
                 message = await orchestrator.check_auto_scene(user_id)
-                if message and "habis" in message.lower():
+                
+                if message and ("habis" in message.lower() or "selesai" in message.lower()):
                     # Booking habis, kirim notifikasi
                     await self._application.bot.send_message(
                         chat_id=user_id,
                         text=f"⏰ *Booking Telah Berakhir*\n\n{message}",
                         parse_mode='Markdown'
                     )
+                    self._bookings_expired += 1
                     logger.info(f"⏰ Booking expired for user {user_id}")
                     
             except Exception as e:
                 logger.error(f"Booking check error for {user_id}: {e}")
+    
+    # =========================================================================
+    # SESSION TIMEOUT LOOP
+    # =========================================================================
+    
+    async def _session_timeout_loop(self) -> None:
+        """Cek session timeout setiap 5 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_session_timeout_run
+            
+            if elapsed >= self.session_timeout_interval:
+                await self._check_session_timeout()
+                self.last_session_timeout_run = now
+            
+            await asyncio.sleep(60)
+    
+    async def _check_session_timeout(self) -> None:
+        """Cek dan timeout session yang tidak aktif"""
+        if not self._application or not self._user_ids:
+            return
+        
+        now = time.time()
+        for user_id in self._user_ids:
+            last_active = self._last_activity.get(user_id, now)
+            if now - last_active > self._session_timeout_seconds:
+                try:
+                    if not self._get_orchestrator:
+                        continue
+                    
+                    orchestrator = await self._get_orchestrator()
+                    active_role = orchestrator.get_active_role(user_id)
+                    
+                    if active_role:
+                        orchestrator.clear_session(user_id)
+                        self._sessions_timeout += 1
+                        logger.info(f"⏰ Session timeout for user {user_id} (role: {active_role})")
+                        
+                        # Send notification
+                        await self._application.bot.send_message(
+                            chat_id=user_id,
+                            text="⏰ *Sesi berakhir karena tidak aktif terlalu lama.*\n\nKetik /nova untuk memulai lagi.",
+                            parse_mode='Markdown'
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Session timeout error for {user_id}: {e}")
+    
+    # =========================================================================
+    # PERSONALITY DRIFT LOOP
+    # =========================================================================
+    
+    async def _personality_loop(self) -> None:
+        """Update personality drift setiap 1 jam"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_personality_run
+            
+            if elapsed >= self.personality_interval:
+                await self._update_personality()
+                self.last_personality_run = now
+            
+            await asyncio.sleep(300)
+    
+    async def _update_personality(self) -> None:
+        """Update personality drift untuk semua role"""
+        try:
+            if not self._get_role_manager:
+                return
+            
+            role_manager = self._get_role_manager()
+            
+            for role_id, role in role_manager.roles.items():
+                if hasattr(role, 'reality') and hasattr(role.reality, 'personality_drift'):
+                    # Personality drift already handled in update_from_message
+                    # Just log current state
+                    desc = role.reality.personality_drift.get_description()
+                    if desc:
+                        logger.debug(f"🧠 {role_id} personality: {desc}")
+            
+        except Exception as e:
+            logger.error(f"Personality update error: {e}")
     
     # =========================================================================
     # AUTO BACKUP LOOP
@@ -453,6 +626,7 @@ class VeloraWorker:
             if elapsed >= self.backup_interval:
                 await self._auto_backup()
                 self.last_backup_run = now
+                self._backups_created += 1
             
             await asyncio.sleep(3600)
     
@@ -500,9 +674,20 @@ class VeloraWorker:
             'is_running': self.is_running,
             'active_tasks': len(self.tasks),
             'monitored_users': len(self._user_ids),
+            'rindu_updates': self._rindu_updates,
+            'conflict_decays': self._conflict_decays,
+            'mood_recoveries': self._mood_recoveries,
+            'drama_decays': self._drama_decays,
+            'auto_saves': self._auto_saves,
+            'proactive_sent': self._proactive_sent,
+            'auto_scenes_sent': self._auto_scenes_sent,
+            'bookings_expired': self._bookings_expired,
+            'sessions_timeout': self._sessions_timeout,
+            'backups_created': self._backups_created,
             'last_rindu': self.last_rindu_run,
             'last_conflict': self.last_conflict_run,
             'last_mood': self.last_mood_run,
+            'last_drama': self.last_drama_run,
             'last_save': self.last_save_run,
             'last_proactive': self.last_proactive_run,
             'last_auto_scene': self.last_auto_scene_run,
@@ -531,16 +716,43 @@ class VeloraWorker:
 ║ ACTIVE TASKS: {stats['active_tasks']}
 ║ MONITORED USERS: {stats['monitored_users']}
 ╠══════════════════════════════════════════════════════════════╣
+║ COUNTERS:
+║   Rindu Updates: {stats['rindu_updates']}
+║   Conflict Decays: {stats['conflict_decays']}
+║   Mood Recoveries: {stats['mood_recoveries']}
+║   Drama Decays: {stats['drama_decays']}
+║   Auto Saves: {stats['auto_saves']}
+║   Proactive Sent: {stats['proactive_sent']}
+║   Auto Scenes Sent: {stats['auto_scenes_sent']}
+║   Bookings Expired: {stats['bookings_expired']}
+║   Sessions Timeout: {stats['sessions_timeout']}
+║   Backups Created: {stats['backups_created']}
+╠══════════════════════════════════════════════════════════════╣
 ║ LAST RUN:
 ║   Rindu: {format_time(stats['last_rindu'])}
 ║   Conflict: {format_time(stats['last_conflict'])}
 ║   Mood: {format_time(stats['last_mood'])}
+║   Drama: {format_time(stats['last_drama'])}
 ║   Save: {format_time(stats['last_save'])}
 ║   Proactive: {format_time(stats['last_proactive'])}
 ║   Auto Scene: {format_time(stats['last_auto_scene'])}
 ║   Backup: {format_time(stats['last_backup'])}
 ╚══════════════════════════════════════════════════════════════╝
 """
+    
+    def reset_stats(self) -> None:
+        """Reset statistik"""
+        self._rindu_updates = 0
+        self._conflict_decays = 0
+        self._mood_recoveries = 0
+        self._drama_decays = 0
+        self._auto_saves = 0
+        self._proactive_sent = 0
+        self._auto_scenes_sent = 0
+        self._bookings_expired = 0
+        self._sessions_timeout = 0
+        self._backups_created = 0
+        logger.info("📊 Worker stats reset")
 
 
 # =============================================================================
@@ -558,7 +770,17 @@ def get_worker() -> VeloraWorker:
     return _worker
 
 
+def reset_worker() -> None:
+    """Reset worker (untuk testing)"""
+    global _worker
+    if _worker:
+        _worker.stop()
+    _worker = None
+    logger.info("🔄 Worker reset")
+
+
 __all__ = [
     'VeloraWorker',
-    'get_worker'
+    'get_worker',
+    'reset_worker'
 ]
