@@ -134,6 +134,8 @@ class RoleManager:
         Switch ke role tertentu.
         Returns: pesan greeting dari role
         """
+        import re
+        
         if role_id not in self.roles:
             return f"Role '{role_id}' tidak ditemukan. Pilih dari: {', '.join(self.roles.keys())}"
     
@@ -161,8 +163,13 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
             style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
             phase = role.relationship.phase if hasattr(role, 'relationship') else None
         
-            # Bersihkan greeting dari karakter Markdown yang bermasalah
-            greeting_clean = greeting.replace('*', '').replace('_', '').replace('`', '').replace('"', "'")
+            # ========== PEMBERSIHAN MARKDOWN ==========
+            # Bersihkan greeting dari semua karakter Markdown
+            greeting_clean = re.sub(r'[*_`]', '', greeting)
+            greeting_clean = greeting_clean.replace('"', "'")
+        
+            hubungan_clean = re.sub(r'[*_`]', '', role.hubungan_dengan_nova)
+            # ========================================
         
             # Format respons berdasarkan tipe role
             if role.role_type in ['pijat_plus_plus', 'pelacur']:
