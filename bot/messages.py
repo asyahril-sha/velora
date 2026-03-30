@@ -17,6 +17,7 @@ from datetime import datetime
 
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.helpers import escape_markdown
 
 from config import get_settings
 from core.orchestrator import get_orchestrator
