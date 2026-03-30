@@ -353,7 +353,30 @@ Ketik **/mulai** setelah deal untuk memulai pijat refleksi.
         if self.name == "Aghnia Punjabi":
             return f"*{self.name} diam sebentar, { 'hijabnya' if self.hijab else 'wajahnya' } sedikit tegang*\n\n\"Maaf, Mas... mungkin aku kurang cocok ya?\""
         else:
-            return f"*{self.name} menghela napas, tangan di pinggang*\n\n\"Mas, gimana sih? Aku udah berusaha lho.\""
+            return f"*{self.name} menghela napas, tangan di pinggang*\n\n\"Mas, gimana sih? Aku udah berusaha lho.\"
+
+    async def generate_response(self, pesan_user: str, context: str = None) -> str:
+        """
+        Generate response untuk Pijat++ dengan profesional dan sensual.
+        """
+        from bot.prompt import get_prompt_builder
+        from bot.ai_client import get_ai_client
+    
+        try:
+            prompt_builder = get_prompt_builder()
+            prompt = prompt_builder.build_role_prompt(self, pesan_user, context)
+        
+            ai_client = get_ai_client()
+            response = await ai_client.generate_with_context(prompt, pesan_user)
+        
+            if not response:
+                return self.get_greeting()
+        
+            return response
+        
+        except Exception as e:
+            logger.error(f"Pijat++ AI error: {e}")
+            return self.get_greeting()
     
     # =========================================================================
     # FORMAT STATUS
