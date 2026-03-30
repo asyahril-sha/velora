@@ -18,8 +18,11 @@ from .tracker import (
     PhysicalCondition,
     IntimacyPhase,
     ClothingLayer,
+    Position,
+    Activity,
     StateTracker,
-    get_state_tracker
+    get_state_tracker,
+    reset_state_tracker
 )
 
 from .emotional import (
@@ -34,14 +37,18 @@ from .relationship import (
     PhaseUnlock,
     Milestone,
     RelationshipManager,
-    get_relationship_manager
+    get_relationship_manager,
+    reset_relationship_manager
 )
 
 from .conflict import (
     ConflictType,
     ConflictSeverity,
+    ConflictResolution,
+    Conflict,
     ConflictEngine,
-    get_conflict_engine
+    get_conflict_engine,
+    reset_conflict_engine
 )
 
 from .world import (
@@ -56,23 +63,29 @@ from .world import (
 )
 
 from .intimacy import (
+    IntimacyPhase as IntimacyPhaseCore,
     IntimacyAction,
+    ClimaxIntensity,
     StaminaSystem,
     ArousalSystem,
     PositionDatabase,
     MoansDatabase,
     ClimaxLocationDatabase,
     IntimacySession,
-    get_intimacy_session
+    get_intimacy_session,
+    reset_intimacy_session
 )
 
 from .service_provider import (
     ServiceType,
     ServiceStatus,
     AutoSceneType,
-    ServiceProviderBase,
+    CustomerTier,
+    Customer,
     FlatEmotionalEngine,
-    ProfessionalRelationship
+    ProfessionalRelationship,
+    ServiceProviderBase,
+    format_price
 )
 
 from .memory import (
@@ -109,8 +122,11 @@ __all__ = [
     "PhysicalCondition",
     "IntimacyPhase",
     "ClothingLayer",
+    "Position",
+    "Activity",
     "StateTracker",
     "get_state_tracker",
+    "reset_state_tracker",
     
     # Emotional
     "EmotionalStyle",
@@ -124,12 +140,16 @@ __all__ = [
     "Milestone",
     "RelationshipManager",
     "get_relationship_manager",
+    "reset_relationship_manager",
     
     # Conflict
     "ConflictType",
     "ConflictSeverity",
+    "ConflictResolution",
+    "Conflict",
     "ConflictEngine",
     "get_conflict_engine",
+    "reset_conflict_engine",
     
     # World
     "GlobalRelationshipStatus",
@@ -142,7 +162,9 @@ __all__ = [
     "reset_world_state",
     
     # Intimacy
+    "IntimacyPhaseCore",
     "IntimacyAction",
+    "ClimaxIntensity",
     "StaminaSystem",
     "ArousalSystem",
     "PositionDatabase",
@@ -150,14 +172,18 @@ __all__ = [
     "ClimaxLocationDatabase",
     "IntimacySession",
     "get_intimacy_session",
+    "reset_intimacy_session",
     
     # Service Provider
     "ServiceType",
     "ServiceStatus",
     "AutoSceneType",
-    "ServiceProviderBase",
+    "CustomerTier",
+    "Customer",
     "FlatEmotionalEngine",
     "ProfessionalRelationship",
+    "ServiceProviderBase",
+    "format_price",
     
     # Memory
     "MemoryEvent",
