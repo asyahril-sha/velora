@@ -6,6 +6,7 @@ Setiap role punya:
 - EmotionalEngine (per role, karena emosi unik)
 - RelationshipManager (per role)
 - ConflictEngine (per role)
+- RealityEngine (per role, untuk realism)
 - Flags (role-specific behavior)
 - Awareness level (LIMITED, NORMAL, FULL)
 """
@@ -13,13 +14,14 @@ Setiap role punya:
 import time
 import logging
 from typing import Dict, List, Optional, Any, Tuple
-from enum import Enum
+from datetime import datetime
 
 from core.emotional import EmotionalEngine, EmotionalStyle
 from core.relationship import RelationshipManager, RelationshipPhase
 from core.conflict import ConflictEngine, ConflictType
 from core.memory import MemoryManager, get_memory_manager
 from core.world import AwarenessLevel, get_world_state
+from core.reality_engine import get_reality_engine, RealityEngine
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class BaseRole:
     """
     Base class untuk semua role.
     State terpusat di MemoryManager, tidak ada duplikasi.
-    Setiap role punya emosi, relationship, conflict sendiri.
+    Setiap role punya emosi, relationship, conflict, dan reality engine sendiri.
     """
     
     def __init__(self,
@@ -45,7 +47,8 @@ class BaseRole:
                  default_clothing: str,
                  hijab: bool = True,
                  appearance: str = "",
-                 awareness_level: AwarenessLevel = AwarenessLevel.NORMAL):
+                 awareness_level: AwarenessLevel = AwarenessLevel.NORMAL,
+                 personality_traits: Dict[str, float] = None):
         
         self.id = role_id
         self.name = name
@@ -63,15 +66,15 @@ class BaseRole:
         self.relationship = RelationshipManager()
         self.conflict = ConflictEngine()
         
+        # ========== REALITY ENGINE (BARU - UNTUK REALISM 9.9) ==========
+        self.reality = get_reality_engine(role_id, personality_traits)
+        
         # ========== MEMORY & WORLD (GLOBAL) ==========
         self.memory: Optional[MemoryManager] = None
         self.world = get_world_state()
         
         # ========== ROLE-SPECIFIC FLAGS ==========
         self.flags: Dict[str, Any] = {}
-        
-        # ========== PHYSICAL STATE (DARI MEMORY) ==========
-        # Tidak disimpan di sini, ambil dari memory.tracker
         
         # ========== CONVERSATION HISTORY ==========
         self.conversations: List[Dict] = []
@@ -117,6 +120,12 @@ class BaseRole:
         emo_changes = self.emotional.update_from_message(pesan_user, self.relationship.level)
         changes.update(emo_changes)
         
+        # Process pending emotions from reality engine
+        delayed = self.reality.emotion_delay.process()
+        for emotion_type, intensity in delayed:
+            emo_changes = self.emotional.apply_pending_emotion(emotion_type, intensity)
+            changes.update(emo_changes)
+        
         # ========== 2. UPDATE CONFLICT ENGINE ==========
         conflict_changes = self.conflict.update_from_message(pesan_user, self.relationship.level)
         changes.update(conflict_changes)
@@ -157,13 +166,36 @@ class BaseRole:
         
         # ========== 5. SAVE TO MEMORY (TERPUSAT) ==========
         if self.memory:
+            # Determine importance based on changes
+            importance = 5
+            if level_up:
+                importance = 9
+            elif changes.get('sayang', 0) > 5:
+                importance = 7
+            elif changes.get('cemburu', 0) > 5:
+                importance = 6
+            elif changes.get('kecewa', 0) > 5:
+                importance = 6
+            
+            emotional_weight = changes.get('sayang', 0) or changes.get('cemburu', 0) or changes.get('kecewa', 0) or 5
+            
             # Add event ke memory
             self.memory.add_event(
                 kejadian=f"User: {pesan_user[:50]}",
                 detail=f"Perubahan: {', '.join([f'{k}:{v}' for k, v in changes.items() if isinstance(v, (int, float))][:3])}",
                 source="user",
                 role_id=self.id,
-                drama_impact=changes.get('cemburu', 0) / 10 if changes.get('cemburu') else 0
+                drama_impact=changes.get('cemburu', 0) / 10 if changes.get('cemburu') else 0,
+                importance=importance,
+                emotional_weight=emotional_weight
+            )
+            
+            # Add to reality engine memory
+            self.reality.add_memory(
+                content=pesan_user[:100],
+                importance=importance,
+                emotional_weight=emotional_weight,
+                tags=['user_message']
             )
             
             # Update role knowledge dari world
@@ -178,6 +210,9 @@ class BaseRole:
         
         # ========== 7. SAVE CONVERSATION ==========
         self.add_conversation(pesan_user, "")
+        
+        # ========== 8. UPDATE PERSONALITY DRIFT ==========
+        self.reality.personality_drift.update(pesan_user, changes)
         
         return changes
     
@@ -194,20 +229,102 @@ class BaseRole:
     
     async def generate_response(self, pesan_user: str, context: str = None) -> str:
         """
-        Generate response menggunakan AI.
-        Context sudah difilter oleh MemoryManager sesuai awareness role.
-        Akan dioverride di subclass dengan prompt builder.
+        Generate response menggunakan AI dengan RealityEngine enhancements.
         """
-        # Ini akan dioverride di subclass
-        # Untuk sementara return greeting
-        return self.get_greeting()
+        from bot.prompt import get_prompt_builder
+        from bot.ai_client import get_ai_client
+        
+        try:
+            # 1. Process through reality engine
+            current_emotion = {
+                'sayang': self.emotional.sayang,
+                'rindu': self.emotional.rindu,
+                'cemburu': self.emotional.cemburu,
+                'kecewa': self.emotional.kecewa,
+                'arousal': self.emotional.arousal,
+                'desire': self.emotional.desire
+            }
+            
+            reality_result = await self.reality.process(pesan_user, current_emotion)
+            
+            # 2. Build prompt sesuai tipe role
+            prompt_builder = get_prompt_builder()
+            if self.role_type == "nova":
+                prompt = prompt_builder.build_nova_prompt(self, pesan_user, context)
+            else:
+                prompt = prompt_builder.build_role_prompt(self, pesan_user, context)
+            
+            # 3. Add recalled memories to prompt
+            if reality_result.get('recalled_memories'):
+                prompt += f"\n\n📝 YANG DIINGAT:\n" + "\n".join([f"- {m[:100]}" for m in reality_result['recalled_memories'][:3]])
+            
+            # 4. Add inner thought if internal conflict
+            if reality_result.get('has_internal_conflict'):
+                inner = reality_result.get('inner_thought', '')
+                if inner:
+                    prompt += f"\n\n💭 PIKIRAN TERSEMBUNYI:\n{inner}"
+            
+            # 5. Call AI
+            ai_client = get_ai_client()
+            
+            # Determine temperature based on arousal and style
+            style = self.emotional.get_current_style()
+            arousal = self.emotional.arousal
+            
+            if arousal > 80:
+                temperature = 1.0
+            elif style == EmotionalStyle.FLIRTY:
+                temperature = 0.95
+            elif style == EmotionalStyle.COLD:
+                temperature = 0.7
+            else:
+                temperature = 0.85
+            
+            max_tokens = 1200 if arousal > 60 else 800
+            
+            response = await ai_client.generate_with_context(
+                prompt, 
+                pesan_user,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # 6. Clean response
+            response = response.strip()
+            
+            # 7. Add imperfections
+            emotion_intensity = max(self.emotional.sayang, self.emotional.arousal, self.emotional.cemburu) / 100
+            response = self.reality.add_imperfections(response, emotion_intensity)
+            
+            # 8. Add scene if needed
+            if self.role_type != "pijat_plus_plus" and self.role_type != "pelacur":
+                scene = self.reality.scene_engine.get_body_language(
+                    style.value if style else "neutral",
+                    emotion_intensity
+                )
+                if scene and scene not in response and not response.startswith('*'):
+                    response = f"{scene}\n\n{response}"
+            
+            # 9. Validate
+            if not response or len(response) < 3:
+                return self.get_greeting()
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"AI response error for {self.name}: {e}")
+            return self.get_greeting()
+    
+    # =========================================================================
+    # GREETING & CONFLICT RESPONSE
+    # =========================================================================
     
     def get_greeting(self) -> str:
         """
         Dapatkan greeting - OVERRIDE DI SUBCLASS.
         Harus natural, sesuai karakter.
         """
-        hour = time.localtime().tm_hour
+        hour = datetime.now().hour
         if 5 <= hour < 11:
             waktu = "pagi"
         elif 11 <= hour < 15:
@@ -282,6 +399,9 @@ class BaseRole:
         # Dapatkan role flags
         flags_summary = self._get_flags_summary()
         
+        # Dapatkan personality drift
+        personality = self.reality.personality_drift.get_description()
+        
         return f"""
 {memory_context}
 
@@ -297,6 +417,8 @@ PERCAKAPAN TERAKHIR:
 {recent_convo if recent_convo else "Belum ada percakapan"}
 
 {flags_summary}
+
+🧠 PERSONALITY: {personality if personality else "stabil"}
 
 ═══════════════════════════════════════════════════════════════
 ATURAN WAJIB:
@@ -319,7 +441,7 @@ RESPON {self.name}:
             return ""
         
         lines = ["═══════════════════════════════════════════════════════════════"]
-        lines.append("ROLE-SPECIFIC FLAGS:")
+        lines.append("🎭 ROLE-SPECIFIC FLAGS:")
         for key, value in self.flags.items():
             if isinstance(value, bool):
                 lines.append(f"   {key}: {'✅' if value else '❌'}")
@@ -350,6 +472,9 @@ RESPON {self.name}:
             clothing = self.memory.tracker.get_clothing_summary()
             location = self.memory.tracker.location
         
+        # Dapatkan personality
+        personality = self.reality.personality_drift.get_description()
+        
         return f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║              👤 {self.name} ({self.nickname})                         ║
@@ -373,6 +498,7 @@ RESPON {self.name}:
 ║ PAKAIAN: {clothing[:40] if clothing else '-'}
 ║ LOKASI: {location if location else '-'}
 ║ INTERAKSI: {self.relationship.interaction_count}x
+║ PERSONALITY: {personality if personality else 'stabil'}
 ╚══════════════════════════════════════════════════════════════╝
 """
     
