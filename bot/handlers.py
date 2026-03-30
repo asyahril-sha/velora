@@ -185,7 +185,11 @@ async def nova_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_user_mode(user_id)
     set_user_mode(user_id, "chat")
     
+    # ========== TAMBAHKAN UPDATE ACTIVE SESSION ==========
     orchestrator = await get_orchestrator()
+    orchestrator.active_sessions[user_id] = "nova"
+    # ====================================================
+    
     role_manager = get_role_manager()
     
     if not role_manager:
@@ -425,6 +429,11 @@ async def role_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_user_mode(user_id)
     set_user_mode(user_id, "role", role_id)
     
+    # ========== TAMBAHKAN UPDATE ACTIVE SESSION ==========
+    orchestrator = await get_orchestrator()
+    orchestrator.active_sessions[user_id] = role_id
+    # ====================================================
+    
     response = role_manager.switch_role(role_id, user_id)
     
     worker = get_worker()
@@ -484,7 +493,8 @@ async def back_to_nova(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Reset orchestrator session
     orchestrator = await get_orchestrator()
-    orchestrator.clear_session(user_id)
+    orchestrator.active_sessions.pop(user_id, None)  # Hapus active session
+    orchestrator.clear_session(user_id)               # Clear session lama
     
     # Switch ke Nova
     role_manager = get_role_manager()
@@ -520,20 +530,20 @@ async def pause_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from core.emotional import get_emotional_engine
     from core.relationship import get_relationship_manager
     from core.conflict import get_conflict_engine
-    from core.memory import get_memory_manager  # <--- GANTI core.brain dengan core.memory
+    from core.memory import get_memory_manager
     from core.world import get_world_state
     
     emo = get_emotional_engine()
     rel = get_relationship_manager()
     conflict = get_conflict_engine()
-    memory = get_memory_manager()  # <--- GANTI brain dengan memory
+    memory = get_memory_manager()
     world = get_world_state()
     
     await persistent.save_emotional_state(emo)
     await persistent.save_relationship_state(rel)
     await persistent.save_conflict_state(conflict)
-    await persistent.save_world_state(world)  # <--- TAMBAHKAN SAVE WORLD
-    await persistent.save_memory_state(memory)  # <--- TAMBAHKAN SAVE MEMORY (jika ada method ini)
+    await persistent.save_world_state(world)
+    await persistent.save_memory_state(memory)
     
     await update.message.reply_text(
         "⏸️ **Sesi Dihentikan Sementara**\n\n"
