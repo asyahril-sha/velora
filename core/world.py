@@ -1,15 +1,23 @@
 """
 VELORA - World System
 Realitas global tempat semua karakter hidup.
-Semua role punya akses ke world state yang SAMA.
-Cross-role effects: chat dengan satu role mempengaruhi role lain.
+- Global relationship status
+- Drama level dengan decay
+- Public knowledge system
+- Role awareness system (LIMITED, NORMAL, FULL)
+- Cross-role effect propagation
+- Knowledge leak system (probabilistic)
+- Global events timeline
 """
 
 import time
 import logging
+import random
 from typing import Dict, List, Optional, Any, Set
 from enum import Enum
 from dataclasses import dataclass, field
+
+from core.reality_engine import KnowledgeLeakSystem
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 class GlobalRelationshipStatus(str, Enum):
     """Status hubungan global yang diketahui semua role"""
-    PACARAN = "pacaran"
-    DEKAT = "dekat"
-    JAUH = "jauh"
-    PUTUS = "putus"
-    RUSUH = "rusuh"  # sedang konflik
+    PACARAN = "pacaran"      # hubungan baik, stabil
+    DEKAT = "dekat"          # masih dekat tapi ada jarak
+    JAUH = "jauh"            # mulai renggang
+    PUTUS = "putus"          # sudah putus
+    RUSUH = "rusuh"          # sedang konflik, tensi tinggi
 
 
 class AwarenessLevel(str, Enum):
@@ -32,6 +40,14 @@ class AwarenessLevel(str, Enum):
     LIMITED = "limited"   # hanya tahu info publik
     NORMAL = "normal"     # tahu info publik + beberapa private
     FULL = "full"         # tahu hampir semua (Nova)
+
+
+class DramaLevel(str, Enum):
+    """Tingkat drama untuk deskripsi"""
+    NORMAL = "normal"
+    WASPADA = "waspada"
+    TEGANG = "tegang"
+    KRITIS = "kritis"
 
 
 # =============================================================================
@@ -45,14 +61,26 @@ class PublicKnowledge:
     last_big_event: str = ""
     drama_level_summary: str = "normal"
     user_is_active: bool = True
+    last_announcement: str = ""
+    announcement_time: float = 0
     
     def to_dict(self) -> Dict:
         return {
             'relationship_status': self.relationship_status.value,
             'last_big_event': self.last_big_event,
             'drama_level_summary': self.drama_level_summary,
-            'user_is_active': self.user_is_active
+            'user_is_active': self.user_is_active,
+            'last_announcement': self.last_announcement,
+            'announcement_time': self.announcement_time
         }
+    
+    def from_dict(self, data: Dict) -> None:
+        self.relationship_status = GlobalRelationshipStatus(data.get('relationship_status', 'pacaran'))
+        self.last_big_event = data.get('last_big_event', '')
+        self.drama_level_summary = data.get('drama_level_summary', 'normal')
+        self.user_is_active = data.get('user_is_active', True)
+        self.last_announcement = data.get('last_announcement', '')
+        self.announcement_time = data.get('announcement_time', 0)
 
 
 @dataclass
@@ -62,23 +90,41 @@ class RoleAwareness:
     awareness_level: AwarenessLevel
     known_facts: Set[str] = field(default_factory=set)
     last_updated: float = field(default_factory=time.time)
+    misunderstanding_count: int = 0
+    revelation_count: int = 0
     
     def knows(self, fact: str) -> bool:
         """Cek apakah role tahu fakta tertentu"""
         return fact in self.known_facts
     
-    def learn(self, fact: str) -> None:
-        """Role belajar fakta baru"""
+    def learn(self, fact: str, is_misunderstood: bool = False) -> None:
+        """Role belajar fakta baru (bisa salah paham)"""
+        if is_misunderstood:
+            self.misunderstanding_count += 1
+            fact = f"(mungkin) {fact}"
         self.known_facts.add(fact)
         self.last_updated = time.time()
-        logger.info(f"📖 {self.role_id} learned: {fact}")
+        logger.debug(f"📖 {self.role_id} learned: {fact[:50]}")
+    
+    def revelation(self, fact: str) -> None:
+        """Role mendapat pencerahan (fakta yang sebelumnya salah paham menjadi benar)"""
+        self.revelation_count += 1
+        # Hapus versi salah paham jika ada
+        for f in list(self.known_facts):
+            if "(mungkin)" in f and fact in f:
+                self.known_facts.remove(f)
+        self.known_facts.add(fact)
+        self.last_updated = time.time()
+        logger.info(f"✨ {self.role_id} had revelation: {fact[:50]}")
     
     def to_dict(self) -> Dict:
         return {
             'role_id': self.role_id,
             'awareness_level': self.awareness_level.value,
             'known_facts': list(self.known_facts),
-            'last_updated': self.last_updated
+            'last_updated': self.last_updated,
+            'misunderstanding_count': self.misunderstanding_count,
+            'revelation_count': self.revelation_count
         }
 
 
@@ -90,24 +136,28 @@ class WorldState:
     """
     World State - Realitas global.
     Semua karakter hidup di dunia yang sama.
+    Terintegrasi dengan KnowledgeLeakSystem.
     """
     
     def __init__(self):
         # ========== GLOBAL STATE ==========
         self.relationship_status: GlobalRelationshipStatus = GlobalRelationshipStatus.PACARAN
         self.drama_level: float = 0.0  # 0-100
-        self.drama_history: List[Dict] = []  # riwayat drama
+        self.drama_history: List[Dict] = []
         
         # ========== PUBLIC KNOWLEDGE ==========
         self.public_knowledge: PublicKnowledge = PublicKnowledge()
         
         # ========== CROSS-ROLE TRACKING ==========
-        self.last_interaction_with: Optional[str] = None  # role terakhir diajak chat
+        self.last_interaction_with: Optional[str] = None
         self.last_interaction_time: float = 0
-        self.drama_triggers: List[Dict] = []  # kejadian yang memicu drama
+        self.drama_triggers: List[Dict] = []
         
         # ========== ROLE AWARENESS ==========
         self.role_awareness: Dict[str, RoleAwareness] = {}
+        
+        # ========== KNOWLEDGE LEAK SYSTEM ==========
+        self.knowledge_leak = KnowledgeLeakSystem()
         
         # ========== GLOBAL TIMELINE ==========
         self.global_events: List[Dict] = []
@@ -117,7 +167,11 @@ class WorldState:
         self.drama_decay_per_hour: float = 2.0
         self.last_drama_update: float = time.time()
         
-        logger.info("🌍 World System initialized")
+        # ========== WORLD RUMORS ==========
+        self.active_rumors: List[Dict] = []
+        self.max_rumors: int = 10
+        
+        logger.info("🌍 World System initialized with KnowledgeLeak")
     
     # =========================================================================
     # DRAMA MANAGEMENT
@@ -125,7 +179,7 @@ class WorldState:
     
     def add_drama(self, amount: float, source: str, reason: str) -> float:
         """
-        Tambah drama level.
+        Tambah drama level dengan context-aware.
         Returns: drama level baru
         """
         old_level = self.drama_level
@@ -137,10 +191,15 @@ class WorldState:
                 'source': source,
                 'reason': reason,
                 'amount': amount,
+                'old_level': old_level,
                 'new_level': self.drama_level
             })
             
-            # Simpan ke global events
+            # Keep only last 50 triggers
+            if len(self.drama_triggers) > 50:
+                self.drama_triggers.pop(0)
+            
+            # Add to global events
             self.add_global_event(
                 event_type="drama_change",
                 source=source,
@@ -152,6 +211,10 @@ class WorldState:
             
             # Update public knowledge summary
             self._update_drama_summary()
+            
+            # Generate rumor if drama is high
+            if self.drama_level > 60 and random.random() < 0.3:
+                self._generate_rumor(source, reason)
         
         return self.drama_level
     
@@ -164,32 +227,97 @@ class WorldState:
         if hours > 0:
             decay = self.drama_decay_per_hour * hours
             if self.drama_level > 0:
+                old = self.drama_level
                 self.drama_level = max(0, self.drama_level - decay)
                 self.last_drama_update = now
                 
-                if decay > 0:
+                if decay > 0 and old != self.drama_level:
                     logger.debug(f"📉 Drama decay: -{decay:.1f} → {self.drama_level:.1f}")
+                    self._update_drama_summary()
     
     def _update_drama_summary(self) -> None:
         """Update ringkasan drama untuk public knowledge"""
-        if self.drama_level >= 70:
-            self.public_knowledge.drama_level_summary = "tegang"
-        elif self.drama_level >= 40:
-            self.public_knowledge.drama_level_summary = "waspada"
-        elif self.drama_level >= 15:
-            self.public_knowledge.drama_level_summary = "sedikit tegang"
+        if self.drama_level >= 80:
+            self.public_knowledge.drama_level_summary = DramaLevel.KRITIS.value
+        elif self.drama_level >= 60:
+            self.public_knowledge.drama_level_summary = DramaLevel.TEGANG.value
+        elif self.drama_level >= 30:
+            self.public_knowledge.drama_level_summary = DramaLevel.WASPADA.value
         else:
-            self.public_knowledge.drama_level_summary = "normal"
+            self.public_knowledge.drama_level_summary = DramaLevel.NORMAL.value
     
     def get_drama_description(self) -> str:
         """Dapatkan deskripsi drama untuk prompt"""
-        if self.drama_level >= 70:
-            return "🔥 DRAMA TINGGI! Suasana tegang, semua role merasakan ketegangan."
-        elif self.drama_level >= 40:
-            return "⚠️ Drama sedang. Ada ketegangan di udara."
+        if self.drama_level >= 80:
+            return "🔥🔥 DRAMA KRITIS! Suasana sangat tegang, semua role merasakan tekanan luar biasa. Konflik bisa meletak kapan saja."
+        elif self.drama_level >= 60:
+            return "🔥 DRAMA TINGGI! Suasana tegang, semua role waspada. Ada sesuatu yang tidak beres."
+        elif self.drama_level >= 30:
+            return "⚠️ Drama sedang. Ada ketegangan di udara, tapi masih bisa dikendalikan."
         elif self.drama_level >= 15:
             return "😐 Sedikit tegang, tapi masih normal."
         return "😊 Suasana normal, tidak ada drama."
+    
+    def get_drama_bar(self) -> str:
+        """Dapatkan bar visual drama"""
+        filled = int(self.drama_level / 10)
+        if self.drama_level >= 80:
+            return "🔥" * filled + "⚪" * (10 - filled)
+        elif self.drama_level >= 60:
+            return "🌋" * filled + "⚪" * (10 - filled)
+        elif self.drama_level >= 30:
+            return "⚠️" * filled + "⚪" * (10 - filled)
+        return "💜" * filled + "⚪" * (10 - filled)
+    
+    # =========================================================================
+    # RUMOR SYSTEM
+    # =========================================================================
+    
+    def _generate_rumor(self, source: str, reason: str) -> None:
+        """Generate rumor dari kejadian drama"""
+        rumor = {
+            'id': len(self.active_rumors) + 1,
+            'content': f"Kabarnya {source} terlibat drama: {reason[:50]}",
+            'source': source,
+            'timestamp': time.time(),
+            'spread_count': 0,
+            'expires': time.time() + 3600  # 1 hour
+        }
+        self.active_rumors.append(rumor)
+        
+        # Limit rumors
+        if len(self.active_rumors) > self.max_rumors:
+            self.active_rumors.pop(0)
+        
+        logger.info(f"📢 New rumor generated: {rumor['content'][:50]}")
+    
+    def spread_rumor(self, role_id: str) -> Optional[str]:
+        """
+        Spread rumor to a role.
+        Returns rumor content if role hears it.
+        """
+        if not self.active_rumors:
+            return None
+        
+        # Chance to hear rumor based on awareness level
+        awareness = self.role_awareness.get(role_id)
+        if not awareness:
+            return None
+        
+        chance = {
+            AwarenessLevel.FULL: 0.4,
+            AwarenessLevel.NORMAL: 0.2,
+            AwarenessLevel.LIMITED: 0.1
+        }.get(awareness.awareness_level, 0.1)
+        
+        if random.random() > chance:
+            return None
+        
+        # Select random rumor
+        rumor = random.choice(self.active_rumors)
+        rumor['spread_count'] += 1
+        
+        return rumor['content']
     
     # =========================================================================
     # CROSS-ROLE EFFECTS
@@ -213,7 +341,7 @@ class WorldState:
         # ========== PELAKOR EFFECT ==========
         if role_id == "pelakor":
             # Chat dengan pelakor → drama naik, Nova cemburu
-            drama_gain = 10
+            drama_gain = random.uniform(8, 15)
             self.add_drama(drama_gain, "pelakor", f"User chat dengan pelakor")
             effects['drama_change'] = drama_gain
             effects['affected_roles'].append('nova')
@@ -221,13 +349,15 @@ class WorldState:
             
             # Jika drama sudah tinggi, efek lebih besar
             if self.drama_level > 60:
-                self.add_drama(5, "pelakor", "Drama tinggi, efek berantai")
-                effects['drama_change'] += 5
+                extra_gain = random.uniform(3, 8)
+                self.add_drama(extra_gain, "pelakor", "Drama tinggi, efek berantai")
+                effects['drama_change'] += extra_gain
+                effects['message'] += " (efek berantai)"
         
         # ========== IPAR EFFECT ==========
         elif role_id == "ipar":
             # Chat dengan ipar → Nova curiga
-            drama_gain = 5
+            drama_gain = random.uniform(3, 8)
             self.add_drama(drama_gain, "ipar", f"User chat dengan ipar")
             effects['drama_change'] = drama_gain
             effects['affected_roles'].append('nova')
@@ -236,7 +366,7 @@ class WorldState:
         # ========== ISTRI ORANG EFFECT ==========
         elif role_id == "istri_orang":
             # Chat dengan istri orang → drama naik, guilt effect
-            drama_gain = 8
+            drama_gain = random.uniform(5, 12)
             self.add_drama(drama_gain, "istri_orang", f"User chat dengan istri orang")
             effects['drama_change'] = drama_gain
             effects['affected_roles'].extend(['nova', 'pelakor'])
@@ -246,22 +376,25 @@ class WorldState:
         elif role_id == "teman_kantor":
             # Chat dengan teman kantor → drama sedikit naik (gosip)
             if 'nova' in msg_lower or 'pacar' in msg_lower:
-                drama_gain = 3
-                self.add_drama(drama_gain, "teman_kantor", f"User cerita tentang Nova ke teman kantor")
+                drama_gain = random.uniform(2, 5)
+                self.add_drama(drama_gain, "teman_kantor", f"User cerita tentang Nova")
                 effects['drama_change'] = drama_gain
+                effects['affected_roles'].append('nova')
                 effects['message'] = "Teman kantor tahu info → gosip menyebar"
         
         # ========== NOVA EFFECT ==========
         elif role_id == "nova":
             # Chat dengan Nova → bisa turunin drama kalo baik, atau naikkin kalo konflik
             if emotional_changes.get('sayang', 0) > 0 or emotional_changes.get('mood', 0) > 0:
-                drama_loss = -5
-                self.add_drama(drama_loss, "nova", "User baik ke Nova, drama turun")
-                effects['drama_change'] = drama_loss
+                drama_loss = random.uniform(3, 8)
+                self.add_drama(-drama_loss, "nova", "User baik ke Nova, drama turun")
+                effects['drama_change'] = -drama_loss
+                effects['message'] = "Nova tenang → drama turun"
             elif emotional_changes.get('cemburu', 0) > 0 or emotional_changes.get('kecewa', 0) > 0:
-                drama_gain = 8
+                drama_gain = random.uniform(5, 12)
                 self.add_drama(drama_gain, "nova", "Nova cemburu/kecewa, drama naik")
                 effects['drama_change'] = drama_gain
+                effects['message'] = "Nova cemburu → drama naik"
         
         # Update last interaction
         self.last_interaction_with = role_id
@@ -313,7 +446,7 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
         return guidelines.get(role_id, "")
     
     # =========================================================================
-    # ROLE AWARENESS
+    # ROLE AWARENESS (UPDATED with KnowledgeLeak)
     # =========================================================================
     
     def register_role(self, role_id: str, awareness_level: AwarenessLevel) -> None:
@@ -325,10 +458,33 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
             )
             logger.info(f"📝 Role registered: {role_id} (awareness: {awareness_level.value})")
     
-    def teach_role(self, role_id: str, fact: str) -> None:
-        """Ajarkan fakta ke role tertentu"""
-        if role_id in self.role_awareness:
-            self.role_awareness[role_id].learn(fact)
+    def teach_role(self, role_id: str, fact: str, fact_type: str = "general") -> Optional[str]:
+        """
+        Ajarkan fakta ke role tertentu dengan possible misunderstanding.
+        Returns: fact yang mungkin sudah dimodifikasi jika misunderstood
+        """
+        if role_id not in self.role_awareness:
+            return None
+        
+        awareness = self.role_awareness[role_id]
+        
+        # Use knowledge leak system
+        knows, misunderstood = self.knowledge_leak.should_know(role_id, fact_type)
+        
+        if not knows:
+            return None
+        
+        # Get modified fact if misunderstood
+        modified_fact = self.knowledge_leak.get_knowledge(role_id, fact, fact_type)
+        
+        if modified_fact and modified_fact != fact:
+            awareness.learn(modified_fact, is_misunderstood=True)
+            logger.info(f"📖 {role_id} learned (misunderstood): {modified_fact[:50]}")
+            return modified_fact
+        else:
+            awareness.learn(fact)
+            logger.info(f"📖 {role_id} learned: {fact[:50]}")
+            return fact
     
     def get_knowledge_for_role(self, role_id: str) -> Dict[str, Any]:
         """
@@ -345,15 +501,19 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
         if awareness.awareness_level == AwarenessLevel.NORMAL:
             knowledge['drama_details'] = self._get_drama_details()
             knowledge['last_interaction'] = self.last_interaction_with
+            knowledge['active_rumors'] = [r['content'] for r in self.active_rumors[-3:]]
         
         elif awareness.awareness_level == AwarenessLevel.FULL:
             knowledge['drama_details'] = self._get_drama_details()
             knowledge['last_interaction'] = self.last_interaction_with
             knowledge['drama_history'] = self.drama_triggers[-5:]
             knowledge['all_roles'] = list(self.role_awareness.keys())
+            knowledge['active_rumors'] = [r['content'] for r in self.active_rumors]
         
         # Tambah fakta yang diketahui role
         knowledge['known_facts'] = list(awareness.known_facts)
+        knowledge['misunderstanding_count'] = awareness.misunderstanding_count
+        knowledge['revelation_count'] = awareness.revelation_count
         
         return knowledge
     
@@ -363,14 +523,19 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
             'relationship_status': self.relationship_status.value,
             'drama_level': self.drama_level,
             'drama_summary': self.public_knowledge.drama_level_summary,
-            'last_big_event': self.public_knowledge.last_big_event
+            'last_big_event': self.public_knowledge.last_big_event,
+            'last_announcement': self.public_knowledge.last_announcement
         }
     
     def _get_drama_details(self) -> Dict[str, Any]:
         """Dapatkan detail drama (untuk awareness NORMAL+)"""
+        recent_triggers = self.drama_triggers[-3:] if self.drama_triggers else []
+        trend = "naik" if recent_triggers and recent_triggers[-1].get('amount', 0) > 0 else "turun"
+        
         return {
-            'recent_triggers': self.drama_triggers[-3:],
-            'trend': "naik" if self.drama_triggers and self.drama_triggers[-1].get('amount', 0) > 0 else "turun"
+            'recent_triggers': recent_triggers,
+            'trend': trend,
+            'peak_today': max([t.get('new_level', 0) for t in self.drama_triggers[-24:]]) if self.drama_triggers else 0
         }
     
     # =========================================================================
@@ -393,8 +558,10 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
             self.global_events.pop(0)
         
         # Jika event penting, update public knowledge
-        if impact > 15 or event_type in ['conflict', 'revelation']:
+        if impact > 15 or event_type in ['conflict', 'revelation', 'breakup']:
             self.public_knowledge.last_big_event = description[:100]
+            self.public_knowledge.announcement_time = time.time()
+            self.public_knowledge.last_announcement = description[:100]
     
     def get_global_timeline(self, count: int = 10) -> List[Dict]:
         """Dapatkan timeline global"""
@@ -413,27 +580,39 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
         changes = {}
         
         # ========== RELATIONSHIP STATUS CHANGE ==========
-        if 'putus' in msg_lower or 'selesai' in msg_lower:
+        if any(k in msg_lower for k in ['putus', 'selesai', 'berakhir']):
             if self.relationship_status != GlobalRelationshipStatus.PUTUS:
                 self.relationship_status = GlobalRelationshipStatus.PUTUS
                 changes['relationship_status'] = 'putus'
                 self.add_drama(20, role_id, "User mengancam putus")
                 self.add_global_event('relationship_change', role_id, "Status berubah menjadi PUTUS", 20)
         
-        elif 'maaf' in msg_lower and self.relationship_status == GlobalRelationshipStatus.RUSUH:
+        elif any(k in msg_lower for k in ['rusuh', 'konflik', 'bertengkar']):
+            if self.relationship_status != GlobalRelationshipStatus.RUSUH:
+                self.relationship_status = GlobalRelationshipStatus.RUSUH
+                changes['relationship_status'] = 'rusuh'
+                self.add_drama(15, role_id, "Hubungan sedang rusuh")
+                self.add_global_event('relationship_change', role_id, "Status berubah menjadi RUSUH", 15)
+        
+        elif any(k in msg_lower for k in ['maaf', 'sorry', 'baik lagi']) and self.relationship_status == GlobalRelationshipStatus.RUSUH:
             self.relationship_status = GlobalRelationshipStatus.PACARAN
             changes['relationship_status'] = 'pacaran'
             self.add_drama(-15, role_id, "User minta maaf, status kembali normal")
+            self.add_global_event('relationship_change', role_id, "Status kembali ke PACARAN", -15)
         
         # ========== DRAMA TRIGGERS ==========
         if 'rahasia' in msg_lower:
-            self.add_drama(5, role_id, "User membocorkan rahasia")
+            self.add_drama(random.uniform(3, 8), role_id, "User membocorkan rahasia")
         
-        if 'bohong' in msg_lower or 'dust' in msg_lower:
-            self.add_drama(10, role_id, "User ketahuan bohong")
+        if any(k in msg_lower for k in ['bohong', 'dust', 'curang']):
+            self.add_drama(random.uniform(5, 12), role_id, "User ketahuan bohong")
         
-        if 'cinta' in msg_lower or 'sayang' in msg_lower:
-            self.add_drama(-3, role_id, "User mengungkapkan cinta")
+        if any(k in msg_lower for k in ['cinta', 'sayang']):
+            self.add_drama(random.uniform(-5, -2), role_id, "User mengungkapkan cinta")
+        
+        # ========== RUMOR TRIGGERS ==========
+        if any(k in msg_lower for k in ['jangan bilang', 'rahasia', 'diam-diam']):
+            self._generate_rumor(role_id, "Ada rahasia yang disembunyikan")
         
         return changes
     
@@ -444,23 +623,36 @@ CROSS-ROLE EFFECT (TEMAN KANTOR):
     def get_context_for_prompt(self, role_id: str = None) -> str:
         """Dapatkan konteks world untuk prompt AI"""
         knowledge = self.get_knowledge_for_role(role_id) if role_id else self._get_public_knowledge()
-        
         drama_desc = self.get_drama_description()
+        drama_bar = self.get_drama_bar()
         
-        return f"""
+        # Get rumor for role
+        rumor = self.spread_rumor(role_id) if role_id else None
+        
+        context = f"""
 ═══════════════════════════════════════════════════════════════
-🌍 WORLD STATE (REALITAS GLOBAL)
+🌍 WORLD STATE
 ═══════════════════════════════════════════════════════════════
 STATUS HUBUNGAN: {knowledge.get('relationship_status', 'pacaran').upper()}
-DRAMA LEVEL: {self.drama_level:.0f}%
+DRAMA LEVEL: {drama_bar} {self.drama_level:.0f}%
 {drama_desc}
 
 INFO YANG KAMU TAHU:
 - Status hubungan: {knowledge.get('relationship_status', 'pacaran')}
 - Drama: {knowledge.get('drama_summary', 'normal')}
-{'- Drama detail: ' + str(knowledge.get('drama_details', {})) if knowledge.get('drama_details') else ''}
-{'- Terakhir chat dengan: ' + knowledge.get('last_interaction', 'tidak diketahui') if knowledge.get('last_interaction') else ''}
+- Kejadian terakhir: {knowledge.get('last_big_event', 'tidak ada')}
 """
+        
+        if knowledge.get('drama_details'):
+            context += f"\n- Detail drama: {knowledge['drama_details'].get('trend', 'stabil')}"
+        
+        if knowledge.get('last_interaction'):
+            context += f"\n- Terakhir chat dengan: {knowledge['last_interaction']}"
+        
+        if rumor:
+            context += f"\n\n📢 RUMOR YANG KAMU DENGAR:\n\"{rumor}\""
+        
+        return context
     
     # =========================================================================
     # FORMAT STATUS
@@ -468,17 +660,19 @@ INFO YANG KAMU TAHU:
     
     def format_status(self) -> str:
         """Format status world untuk display"""
-        def bar(value, char="🌍"):
-            filled = int(value / 10)
-            return char * filled + "⚪" * (10 - filled)
+        drama_bar = self.get_drama_bar()
         
         return f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                    🌍 WORLD STATE                           ║
 ╠══════════════════════════════════════════════════════════════╣
-║ DRAMA LEVEL: {bar(self.drama_level)} {self.drama_level:.0f}%
+║ DRAMA LEVEL: {drama_bar} {self.drama_level:.0f}%
 ║ STATUS: {self.relationship_status.value.upper()}
-║ LAST INTERACTION: {self.last_interaction_with or '-'}
+║ LAST EVENT: {self.public_knowledge.last_big_event[:40] if self.public_knowledge.last_big_event else '-'}
+╠══════════════════════════════════════════════════════════════╣
+║ ACTIVE RUMORS: {len(self.active_rumors)}
+║ GLOBAL EVENTS: {len(self.global_events)}
+║ DRAMA TRIGGERS: {len(self.drama_triggers)}
 ╠══════════════════════════════════════════════════════════════╣
 ║ ROLE AWARENESS:
 {self._format_awareness()}
@@ -487,6 +681,9 @@ INFO YANG KAMU TAHU:
     
     def _format_awareness(self) -> str:
         """Format role awareness untuk display"""
+        if not self.role_awareness:
+            return "   (belum ada role terdaftar)"
+        
         lines = []
         for role_id, awareness in self.role_awareness.items():
             level_emoji = {
@@ -494,8 +691,9 @@ INFO YANG KAMU TAHU:
                 AwarenessLevel.NORMAL: "📖",
                 AwarenessLevel.FULL: "🔓"
             }.get(awareness.awareness_level, "❓")
-            lines.append(f"   {level_emoji} {role_id}: {awareness.awareness_level.value}")
-        return "\n".join(lines) if lines else "   (belum ada role terdaftar)"
+            lines.append(f"   {level_emoji} {role_id}: {awareness.awareness_level.value} ({len(awareness.known_facts)} facts)")
+        
+        return "\n".join(lines)
     
     # =========================================================================
     # SERIALIZATION
@@ -511,7 +709,8 @@ INFO YANG KAMU TAHU:
             'last_interaction_time': self.last_interaction_time,
             'drama_triggers': self.drama_triggers[-20:],
             'global_events': self.global_events[-50:],
-            'role_awareness': {rid: awareness.to_dict() for rid, awareness in self.role_awareness.items()}
+            'active_rumors': self.active_rumors,
+            'role_awareness': {rid: aw.to_dict() for rid, aw in self.role_awareness.items()}
         }
     
     def from_dict(self, data: Dict) -> None:
@@ -522,15 +721,12 @@ INFO YANG KAMU TAHU:
         self.last_interaction_time = data.get('last_interaction_time', 0)
         self.drama_triggers = data.get('drama_triggers', [])
         self.global_events = data.get('global_events', [])
+        self.active_rumors = data.get('active_rumors', [])
         
         # Load public knowledge
         pk_data = data.get('public_knowledge', {})
-        self.public_knowledge = PublicKnowledge(
-            relationship_status=GlobalRelationshipStatus(pk_data.get('relationship_status', 'pacaran')),
-            last_big_event=pk_data.get('last_big_event', ''),
-            drama_level_summary=pk_data.get('drama_level_summary', 'normal'),
-            user_is_active=pk_data.get('user_is_active', True)
-        )
+        self.public_knowledge = PublicKnowledge()
+        self.public_knowledge.from_dict(pk_data)
         
         # Load role awareness
         awareness_data = data.get('role_awareness', {})
@@ -539,11 +735,15 @@ INFO YANG KAMU TAHU:
                 role_id=role_id,
                 awareness_level=AwarenessLevel(aw_data.get('awareness_level', 'limited')),
                 known_facts=set(aw_data.get('known_facts', [])),
-                last_updated=aw_data.get('last_updated', time.time())
+                last_updated=aw_data.get('last_updated', time.time()),
+                misunderstanding_count=aw_data.get('misunderstanding_count', 0),
+                revelation_count=aw_data.get('revelation_count', 0)
             )
         
         self.last_drama_update = time.time()
         self._update_drama_summary()
+        
+        logger.info(f"🌍 World State loaded: drama={self.drama_level:.0f}%, {len(self.role_awareness)} roles")
 
 
 # =============================================================================
@@ -561,9 +761,20 @@ def get_world_state() -> WorldState:
     return _world_state
 
 
+def reset_world_state() -> None:
+    """Reset world state (untuk testing)"""
+    global _world_state
+    _world_state = None
+    logger.info("🔄 World State reset")
+
+
 __all__ = [
     'GlobalRelationshipStatus',
     'AwarenessLevel',
+    'DramaLevel',
+    'PublicKnowledge',
+    'RoleAwareness',
     'WorldState',
-    'get_world_state'
+    'get_world_state',
+    'reset_world_state'
 ]
