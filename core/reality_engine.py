@@ -821,6 +821,13 @@ def get_reality_engine(role_id: str, personality_traits: Dict[str, float] = None
     return _reality_engines[role_id]
 
 
+def reset_reality_engine() -> None:
+    """Reset all reality engines (for testing)"""
+    global _reality_engines
+    _reality_engines = {}
+    logger.info("🔄 Reality Engine reset")
+
+
 __all__ = [
     'IntentScorer',
     'EmotionDelaySystem',
@@ -831,5 +838,6 @@ __all__ = [
     'InnerThoughtSystem',
     'PersonalityDriftSystem',
     'RealityEngine',
-    'get_reality_engine'
+    'get_reality_engine',
+    'reset_reality_engine'
 ]
