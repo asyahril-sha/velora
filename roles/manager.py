@@ -7,27 +7,19 @@ Semua role terdaftar dan bisa diakses melalui manager ini.
 import time
 import json
 import logging
+import asyncio
 from typing import Dict, List, Optional, Any
 
-from .base import BaseRole
+from roles.base import BaseRole
 
-# Import semua role yang sudah dibuat
-from .pijat_plus_plus import (
-    create_aghnia_punjabi,
-    create_munira_agile
-)
-
-from .pelacur import (
-    create_davina_karamoy,
-    create_sallsa_binta
-)
-
-# Import main roles (akan dibuat di fase selanjutnya)
-# from .nova import create_nova
-# from .ipar import create_ipar
-# from .teman_kantor import create_teman_kantor
-# from .pelakor import create_pelakor
-# from .istri_orang import create_istri_orang
+# Import semua role
+from roles.nova import create_nova
+from roles.ipar import create_ipar
+from roles.teman_kantor import create_teman_kantor
+from roles.pelakor import create_pelakor
+from roles.istri_orang import create_istri_orang
+from roles.pijat_plus_plus import create_aghnia_punjabi, create_munira_agile
+from roles.pelacur import create_davina_karamoy, create_sallsa_binta
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +35,8 @@ class RoleManager:
         self.active_role: Optional[str] = None
         self.user_active_role: Dict[int, str] = {}  # user_id -> role_id
         self._ai_client = None
+        self._memory_manager = None
+        self._world = None
         
         # Inisialisasi semua role
         self._init_roles()
@@ -52,6 +46,13 @@ class RoleManager:
     def _init_roles(self):
         """Inisialisasi semua role dengan identitas spesifik"""
         
+        # ========== MAIN ROLES ==========
+        self.roles['nova'] = create_nova()
+        self.roles['ipar'] = create_ipar()
+        self.roles['teman_kantor'] = create_teman_kantor()
+        self.roles['pelakor'] = create_pelakor()
+        self.roles['istri_orang'] = create_istri_orang()
+        
         # ========== FANTASY LIAR - PIJAT++ ==========
         self.roles['pijat_aghnia'] = create_aghnia_punjabi()
         self.roles['pijat_munira'] = create_munira_agile()
@@ -60,14 +61,28 @@ class RoleManager:
         self.roles['pelacur_davina'] = create_davina_karamoy()
         self.roles['pelacur_sallsa'] = create_sallsa_binta()
         
-        # ========== MAIN ROLES (AKAN DITAMBAHKAN NANTI) ==========
-        # self.roles['nova'] = create_nova()
-        # self.roles['ipar'] = create_ipar()
-        # self.roles['teman_kantor'] = create_teman_kantor()
-        # self.roles['pelakor'] = create_pelakor()
-        # self.roles['istri_orang'] = create_istri_orang()
-        
         logger.info(f"🎭 Roles loaded: {list(self.roles.keys())}")
+    
+    # =========================================================================
+    # INITIALIZATION WITH MEMORY & WORLD
+    # =========================================================================
+    
+    async def initialize(self, memory_manager, world):
+        """Initialize semua role dengan memory manager dan world"""
+        self._memory_manager = memory_manager
+        self._world = world
+        
+        for role_id, role in self.roles.items():
+            role.initialize(memory_manager)
+            # Register ke world
+            if world:
+                world.register_role(role_id, role.awareness_level)
+        
+        logger.info(f"🔗 All {len(self.roles)} roles connected to MemoryManager and World")
+    
+    # =========================================================================
+    # ROLE ACCESS
+    # =========================================================================
     
     def get_role(self, role_id: str) -> Optional[BaseRole]:
         """Dapatkan role instance berdasarkan ID"""
@@ -78,16 +93,11 @@ class RoleManager:
         results = []
         for role_id, role in self.roles.items():
             try:
-                hijab_on = False
-                if hasattr(role, 'tracker') and role.tracker:
-                    hijab_on = role.tracker.clothing.get('hijab', {}).get('on', False)
-                elif hasattr(role, 'hijab'):
-                    hijab_on = role.hijab
+                hijab_on = getattr(role, 'hijab', False)
+                boob_size = getattr(role, 'boob_size', '-')
             except Exception:
                 hijab_on = False
-            
-            # Dapatkan boob size jika ada (untuk fantasy liar)
-            boob_size = getattr(role, 'boob_size', '-')
+                boob_size = '-'
             
             results.append({
                 "id": role_id,
@@ -101,8 +111,17 @@ class RoleManager:
                 "hijab": hijab_on,
                 "boob_size": boob_size,
                 "appearance": (role.appearance[:80] + "...") if hasattr(role, 'appearance') and role.appearance else "",
+                "awareness": role.awareness_level.value if hasattr(role, 'awareness_level') else 'normal'
             })
         return results
+    
+    def get_role_by_type(self, role_type: str) -> List[BaseRole]:
+        """Dapatkan semua role dengan tipe tertentu"""
+        return [r for r in self.roles.values() if r.role_type == role_type]
+    
+    # =========================================================================
+    # ACTIVE ROLE MANAGEMENT
+    # =========================================================================
     
     def switch_role(self, role_id: str, user_id: int = None) -> str:
         """
@@ -119,8 +138,9 @@ class RoleManager:
         role = self.roles[role_id]
         
         # Reset status jika perlu (kecuali sedang dalam layanan)
-        if role.status.value in ['booked', 'active']:
-            return f"""
+        if hasattr(role, 'status'):
+            if role.status.value in ['booked', 'active']:
+                return f"""
 ⚠️ **{role.name} sedang dalam sesi layanan!**
 
 Status: {role.status.value.upper()}
@@ -136,6 +156,10 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
         
         # Format respons berdasarkan tipe role
         if role.role_type in ['pijat_plus_plus', 'pelacur']:
+            base_price = getattr(role, 'base_price', 0)
+            min_price = getattr(role, 'min_price', 0)
+            boob_size = getattr(role, 'boob_size', '-')
+            
             return f"""
 💆‍♀️ **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
@@ -143,16 +167,16 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
 
 {greeting}
 
-📊 **Harga:** Rp{role.base_price:,} (nego Rp{role.min_price:,})
-💋 **Body:** {getattr(role, 'boob_size', '-')} | Hijab: {'✅' if role.hijab else '❌'}
+📊 **Harga:** Rp{base_price:,} (nego Rp{min_price:,})
+💋 **Body:** {boob_size} | Hijab: {'✅' if role.hijab else '❌'}
 
 Ketik **/deal** untuk konfirmasi harga, atau **/nego [harga]** untuk nego.
 Ketik **/batal** untuk kembali ke Nova.
 """
         else:
-            # Untuk main roles nanti
+            # Untuk main roles
             return f"""
-💕 **{role.name} ({role.nickname})** - {role_id.upper()}
+💕 **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
 *{role.hubungan_dengan_nova}*
 
@@ -183,6 +207,10 @@ Ketik **/batal** untuk kembali ke Nova.
         if user_id and user_id in self.user_active_role:
             del self.user_active_role[user_id]
     
+    # =========================================================================
+    # MESSAGE PROCESSING
+    # =========================================================================
+    
     async def process_message(self, role_id: str, message: str, user_id: int = None) -> str:
         """
         Proses pesan untuk role tertentu.
@@ -195,97 +223,125 @@ Ketik **/batal** untuk kembali ke Nova.
         msg_lower = message.lower()
         
         # ========== COMMAND HANDLING UNTUK PROVIDER ==========
-        
-        # Deal / Nego (untuk provider jasa)
-        if msg_lower == "/deal":
-            if hasattr(role, 'confirm_booking'):
-                return role.confirm_booking(role.min_price)
-            return "Role ini tidak memiliki sistem booking."
-        
-        elif msg_lower.startswith("/nego"):
-            try:
-                parts = message.split()
-                if len(parts) < 2:
-                    return "Gunakan: /nego [harga]\nContoh: /nego 3000000"
-                offer = int(parts[1].replace('.', '').replace(',', ''))
-                accepted, response = role.negotiate(offer)
-                if accepted:
-                    return f"{response}\n\nKetik **/deal** untuk konfirmasi."
-                return response
-            except ValueError:
-                return "Format harga salah. Gunakan angka tanpa titik/koma.\nContoh: /nego 3000000"
-        
-        # Mulai layanan
-        elif msg_lower == "/mulai":
-            if hasattr(role, 'start_service'):
-                return role.start_service()
-            return "Role ini tidak memiliki layanan start."
-        
-        # Lanjut sesi (untuk pelacur)
-        elif msg_lower == "/lanjut":
-            if hasattr(role, 'start_session_2'):
-                return role.start_session_2()
-            return "Role ini tidak memiliki sesi lanjutan."
-        
-        # Status role
-        elif msg_lower == "/status":
-            return role.format_status()
+        if hasattr(role, 'status') and role.role_type in ['pijat_plus_plus', 'pelacur']:
+            
+            # Deal / Nego
+            if msg_lower == "/deal":
+                if hasattr(role, 'confirm_booking'):
+                    return role.confirm_booking(role.min_price)
+                return "Role ini tidak memiliki sistem booking."
+            
+            elif msg_lower.startswith("/nego"):
+                try:
+                    parts = message.split()
+                    if len(parts) < 2:
+                        return "Gunakan: /nego [harga]\nContoh: /nego 3000000"
+                    offer = int(parts[1].replace('.', '').replace(',', ''))
+                    accepted, response = role.negotiate(offer)
+                    if accepted:
+                        return f"{response}\n\nKetik **/deal** untuk konfirmasi."
+                    return response
+                except ValueError:
+                    return "Format harga salah. Gunakan angka tanpa titik/koma.\nContoh: /nego 3000000"
+            
+            # Mulai layanan
+            elif msg_lower == "/mulai":
+                if hasattr(role, 'start_service'):
+                    return role.start_service()
+                return "Role ini tidak memiliki layanan start."
+            
+            # Lanjut sesi (untuk pelacur)
+            elif msg_lower == "/lanjut":
+                if hasattr(role, 'start_session_2'):
+                    return role.start_session_2()
+                return "Role ini tidak memiliki sesi lanjutan."
+            
+            # Extra service nego untuk pijat++
+            elif "bj" in msg_lower and "nego" in msg_lower:
+                if hasattr(role, 'negotiate_bj'):
+                    try:
+                        parts = message.split()
+                        for p in parts:
+                            if p.isdigit():
+                                offer = int(p)
+                                accepted, response = role.negotiate_bj(offer)
+                                if accepted:
+                                    return f"{response}\n\nKetik **/deal_bj** untuk konfirmasi."
+                                return response
+                    except:
+                        pass
+                    return "Gunakan: nego BJ [harga]\nContoh: nego BJ 200000"
+            
+            elif "sex" in msg_lower and "nego" in msg_lower:
+                if hasattr(role, 'negotiate_sex'):
+                    try:
+                        parts = message.split()
+                        for p in parts:
+                            if p.isdigit():
+                                offer = int(p)
+                                accepted, response = role.negotiate_sex(offer)
+                                if accepted:
+                                    return f"{response}\n\nKetik **/deal_sex** untuk konfirmasi."
+                                return response
+                    except:
+                        pass
+                    return "Gunakan: nego sex [harga]\nContoh: nego sex 700000"
+            
+            elif msg_lower == "/deal_bj":
+                if hasattr(role, 'confirm_extra_service'):
+                    return role.confirm_extra_service("bj", role.bj_price_final)
+            
+            elif msg_lower == "/deal_sex":
+                if hasattr(role, 'confirm_extra_service'):
+                    return role.confirm_extra_service("sex", role.sex_price_final)
         
         # ========== INTIMATE PHASE COMMANDS (untuk pelacur) ==========
-        elif hasattr(role, 'session_phase') and role.session_phase == "intimate_phase":
+        if hasattr(role, 'session_phase') and role.session_phase == "intimate_phase":
             positions = ['missionary', 'cowgirl', 'doggy', 'spooning', 'standing', 'sitting']
             for pos in positions:
                 if pos in msg_lower:
-                    return role.process_intimate_request(pos)
+                    if hasattr(role, 'process_intimate_request'):
+                        return role.process_intimate_request(pos)
         
-        # ========== EXTRA SERVICE NEGO (untuk pijat++) ==========
-        elif "bj" in msg_lower and "nego" in msg_lower:
-            try:
-                parts = message.split()
-                for p in parts:
-                    if p.isdigit():
-                        offer = int(p)
-                        accepted, response = role.negotiate_bj(offer)
-                        if accepted:
-                            return f"{response}\n\nKetik **/deal_bj** untuk konfirmasi."
-                        return response
-            except:
-                pass
-            return "Gunakan: nego BJ [harga]\nContoh: nego BJ 200000"
+        # ========== STATUS COMMAND ==========
+        if msg_lower == "/status":
+            return role.format_status()
         
-        elif "sex" in msg_lower and "nego" in msg_lower:
-            try:
-                parts = message.split()
-                for p in parts:
-                    if p.isdigit():
-                        offer = int(p)
-                        accepted, response = role.negotiate_sex(offer)
-                        if accepted:
-                            return f"{response}\n\nKetik **/deal_sex** untuk konfirmasi."
-                        return response
-            except:
-                pass
-            return "Gunakan: nego sex [harga]\nContoh: nego sex 700000"
+        # ========== FLASHBACK (khusus Nova) ==========
+        if msg_lower == "/flashback" and role_id == "nova":
+            if hasattr(role, 'get_flashback'):
+                return role.get_flashback()
         
-        elif msg_lower == "/deal_bj":
-            if hasattr(role, 'confirm_extra_service'):
-                return role.confirm_extra_service("bj", role.bj_price_final)
-        
-        elif msg_lower == "/deal_sex":
-            if hasattr(role, 'confirm_extra_service'):
-                return role.confirm_extra_service("sex", role.sex_price_final)
-        
-        # ========== DEFAULT: GENERATE AI RESPONSE ==========
-        
-        # Update state dari pesan
+        # ========== UPDATE STATE DARI PESAN ==========
         update_result = role.update_from_message(message)
+        
+        # Cek level up
+        if update_result.get('level_up'):
+            level_baru = update_result.get('new_level', role.relationship.level)
+            notif = f"✨ **Level naik ke {level_baru}/12!** ✨\n\n"
+        else:
+            notif = ""
         
         # Save conversation
         role.add_conversation(message, "")
         
-        # Build prompt dan call AI (akan diimplementasikan nanti)
-        # Untuk sementara, return fallback response
-        return role.get_greeting() if not role.conversations else f"*{role.name} tersenyum*\n\n\"{role.get_greeting()}\""
+        # Generate response (akan dioverride di subclass dengan AI)
+        # Untuk sementara return greeting atau fallback
+        if role.conversations and len(role.conversations) > 1:
+            # Ini akan diganti dengan AI response nanti
+            response = await role.generate_response(message)
+        else:
+            response = role.get_greeting()
+        
+        # Save response ke conversation
+        if role.conversations:
+            role.conversations[-1]['role'] = response[:200]
+        
+        return notif + response
+    
+    # =========================================================================
+    # AUTO SCENE MANAGEMENT
+    # =========================================================================
     
     async def get_auto_scene(self, role_id: str) -> Optional[str]:
         """
@@ -296,7 +352,7 @@ Ketik **/batal** untuk kembali ke Nova.
         if not role:
             return None
         
-        # Cek auto scene untuk provider
+        # Cek auto scene untuk provider (pelacur, pijat++)
         if hasattr(role, 'get_phase_auto_scene'):
             return role.get_phase_auto_scene()
         
@@ -322,6 +378,44 @@ Ketik **/batal** untuk kembali ke Nova.
         
         return None
     
+    # =========================================================================
+    # PROACTIVE CHAT (NOVA)
+    # =========================================================================
+    
+    async def check_proactive_chat(self, user_id: int) -> Optional[str]:
+        """
+        Cek apakah Nova harus chat duluan.
+        Returns: pesan proactive jika ya.
+        """
+        nova = self.get_role('nova')
+        if not nova:
+            return None
+        
+        should_chat, message = nova.should_chat_proactive()
+        if should_chat:
+            return message
+        
+        return None
+    
+    async def check_natural_intimacy(self, user_id: int) -> Optional[str]:
+        """
+        Cek apakah Nova harus mulai intim secara natural.
+        Returns: pesan inisiasi intim jika ya.
+        """
+        nova = self.get_role('nova')
+        if not nova:
+            return None
+        
+        should_start, message = nova.should_start_intimacy_naturally()
+        if should_start:
+            return message
+        
+        return None
+    
+    # =========================================================================
+    # PERSISTENCE
+    # =========================================================================
+    
     async def save_all(self, persistent) -> None:
         """Simpan semua role ke database"""
         for role_id, role in self.roles.items():
@@ -340,6 +434,45 @@ Ketik **/batal** untuk kembali ke Nova.
                     logger.info(f"📀 Role {role.name} loaded from database")
             except Exception as e:
                 logger.error(f"Error loading role {role_id}: {e}")
+    
+    # =========================================================================
+    # UTILITY
+    # =========================================================================
+    
+    def get_roles_summary(self) -> str:
+        """Dapatkan ringkasan semua role untuk display"""
+        lines = ["📋 **DAFTAR ROLE VELORA**", ""]
+        
+        # Main roles
+        lines.append("**💜 MAIN ROLES:**")
+        main_roles = ['nova', 'ipar', 'teman_kantor', 'pelakor', 'istri_orang']
+        for role_id in main_roles:
+            if role_id in self.roles:
+                role = self.roles[role_id]
+                lines.append(f"• `/role {role_id}` - {role.name} ({role.role_type}) | Level {role.relationship.level}")
+        
+        lines.append("")
+        lines.append("**💆‍♀️ FANTASY LIAR - PIJAT++:**")
+        pijat_roles = ['pijat_aghnia', 'pijat_munira']
+        for role_id in pijat_roles:
+            if role_id in self.roles:
+                role = self.roles[role_id]
+                boob = getattr(role, 'boob_size', '-')
+                lines.append(f"• `/role {role_id}` - {role.name} ({boob}, {'hijab' if role.hijab else 'tanpa hijab'})")
+        
+        lines.append("")
+        lines.append("**💃 FANTASY LIAR - PELACUR:**")
+        pelacur_roles = ['pelacur_davina', 'pelacur_sallsa']
+        for role_id in pelacur_roles:
+            if role_id in self.roles:
+                role = self.roles[role_id]
+                boob = getattr(role, 'boob_size', '-')
+                lines.append(f"• `/role {role_id}` - {role.name} ({boob}, {'hijab' if role.hijab else 'tanpa hijab'})")
+        
+        lines.append("")
+        lines.append("Ketik **/batal** untuk kembali ke Nova.")
+        
+        return "\n".join(lines)
 
 
 # =============================================================================
