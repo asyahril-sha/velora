@@ -15,7 +15,10 @@ import logging
 from typing import Dict, Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass, field
-from core.orchestrator import get_orchestrator
+
+# ========== HAPUS INI! ==========
+# from core.orchestrator import get_orchestrator   # <-- CIRCULAR IMPORT!
+# =================================
 
 logger = logging.getLogger(__name__)
 
