@@ -13,10 +13,12 @@ Jantung VELORA dengan 9 dimensi emosi:
 
 5 gaya bicara: Cold, Clingy, Warm, Flirty, Neutral
 Semua respons ditentukan oleh emosi di sini, BUKAN RANDOM.
+Terintegrasi dengan EmotionDelaySystem untuk realism.
 """
 
 import time
 import logging
+import random
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
@@ -67,6 +69,7 @@ class EmotionalEngine:
     Emotional Engine - Jantung VELORA.
     9 dimensi emosi yang saling mempengaruhi.
     Gaya bicara ditentukan oleh kombinasi emosi.
+    Terintegrasi dengan EmotionDelaySystem.
     """
     
     def __init__(self):
@@ -89,11 +92,12 @@ class EmotionalEngine:
         self.rindu_growth_per_hour: float = 5.0
         self.rindu_decay_per_chat: float = 10.0
         self.mood_decay_per_hour: float = 2.0
-        self.mood_boost_from_mas: float = 15.0
+        self.mood_boost_from_user: float = 15.0
         self.cemburu_decay_per_chat: float = 8.0
         self.kecewa_decay_per_apology: float = 25.0
         self.arousal_decay_per_minute: float = 0.5
         self.tension_growth_from_denial: float = 10.0
+        self.desire_decay_per_minute: float = 0.3
         
         # ========== THRESHOLDS ==========
         self.clingy_threshold: float = 70.0
@@ -117,6 +121,9 @@ class EmotionalEngine:
         self.is_angry: bool = False
         self.is_hurt: bool = False
         self.is_waiting_for_apology: bool = False
+        
+        # ========== PENDING EMOTIONS (DARI DELAY SYSTEM) ==========
+        self._pending_emotions: List[Tuple[str, float]] = []
         
         logger.info("💜 Emotional Engine initialized")
     
@@ -152,6 +159,11 @@ class EmotionalEngine:
         if self.arousal > 0:
             arousal_loss = self.arousal_decay_per_minute * (elapsed_hours * 60)
             self.arousal = max(0, self.arousal - arousal_loss)
+        
+        # DESIRE DECAY
+        if self.desire > 0:
+            desire_loss = self.desire_decay_per_minute * (elapsed_hours * 60)
+            self.desire = max(0, self.desire - desire_loss)
         
         # TENSION DECAY
         if self.tension > 0:
@@ -189,11 +201,12 @@ class EmotionalEngine:
         
         # User bilang sayang/cinta
         if any(k in msg_lower for k in ['sayang', 'cinta', 'love', 'luv']):
-            self.sayang = min(100, self.sayang + 8)
+            gain = 8
+            self.sayang = min(100, self.sayang + gain)
             self.mood = min(50, self.mood + 10)
             self.trust = min(100, self.trust + 5)
-            changes.update({'sayang': 8, 'mood': 10, 'trust': 5})
-            logger.info(f"💜 +8 sayang, +10 mood (user bilang sayang)")
+            changes.update({'sayang': gain, 'mood': 10, 'trust': 5})
+            logger.info(f"💜 +{gain} sayang (user bilang sayang)")
             
             if self.is_waiting_for_apology:
                 self.kecewa = max(0, self.kecewa - 15)
@@ -227,13 +240,13 @@ class EmotionalEngine:
                 logger.info(f"💜 Kecewa -{self.kecewa_decay_per_apology:.0f}")
         
         # User perhatian
-        if any(k in msg_lower for k in ['kabar', 'lagi apa', 'ngapain', 'cerita']):
+        if any(k in msg_lower for k in ['kabar', 'lagi apa', 'ngapain', 'cerita', 'gimana']):
             self.mood = min(50, self.mood + 5)
             self.trust = min(100, self.trust + 3)
             changes.update({'mood': 5, 'trust': 3})
             logger.info(f"💜 +5 mood, +3 trust")
         
-        # ========== NEGATIVE TRIGGERS ==========
+        # ========== NEGATIVE TRIGGERS (added as pending) ==========
         
         # User cerita soal perempuan lain (CEMBURU!)
         wanita_keywords = ['cewek', 'perempuan', 'teman cewek', 'temen cewek', 'dia cewek']
@@ -241,47 +254,39 @@ class EmotionalEngine:
         
         if any(k in msg_lower for k in wanita_keywords) and any(k in msg_lower for k in cerita_keywords):
             gain = 15 + (5 if level >= 7 else 0)
-            self.cemburu = min(100, self.cemburu + gain)
-            self.mood = max(-50, self.mood - 10)
-            changes.update({'cemburu': gain, 'mood': -10})
-            logger.warning(f"⚠️ Cemburu +{gain:.0f}!")
+            # Don't apply directly - akan diproses oleh delay system
+            changes.update({'cemburu_pending': gain})
+            logger.info(f"⚠️ Cemburu pending: +{gain}")
             
-            if self.cemburu > 50:
+            if self.cemburu + gain > 50:
                 self.is_angry = True
         
         # User lupa janji (KECEWA!)
         lupa_keywords = ['lupa', 'keinget', 'lupa janji', 'lupa bilang', 'forget']
         if any(k in msg_lower for k in lupa_keywords):
             gain = 20
-            self.kecewa = min(100, self.kecewa + gain)
-            self.mood = max(-50, self.mood - 15)
-            self.trust = max(0, self.trust - 10)
-            changes.update({'kecewa': gain, 'mood': -15, 'trust': -10})
+            changes.update({'kecewa_pending': gain})
             self.is_waiting_for_apology = True
-            logger.warning(f"⚠️ Kecewa +{gain:.0f}!")
+            logger.info(f"⚠️ Kecewa pending: +{gain}")
         
         # User ingkar janji
         ingkar_keywords = ['ingkar', 'gak tepati', 'gak jadi', 'gak dateng', 'batal']
         if any(k in msg_lower for k in ingkar_keywords):
             gain = 25
-            self.kecewa = min(100, self.kecewa + gain)
-            self.mood = max(-50, self.mood - 20)
-            self.trust = max(0, self.trust - 15)
-            changes.update({'kecewa': gain, 'mood': -20, 'trust': -15})
+            changes.update({'kecewa_pending': gain})
             self.is_waiting_for_apology = True
             self.is_hurt = True
-            logger.warning(f"⚠️ Kecewa +{gain:.0f}!")
+            logger.info(f"⚠️ Kecewa pending: +{gain}")
         
         # User marah/kasar
-        kasar_keywords = ['marah', 'kesal', 'bego', 'dasar', 'sial', 'goblok', 'tolol']
+        kasar_keywords = ['marah', 'kesal', 'bego', 'dasar', 'sial', 'goblok', 'tolol', 'stupid']
         if any(k in msg_lower for k in kasar_keywords):
-            self.mood = max(-50, self.mood - 25)
-            self.trust = max(0, self.trust - 15)
-            changes.update({'mood': -25, 'trust': -15})
+            gain = 25
+            changes.update({'mood_pending': -gain, 'trust_pending': -15})
             self.is_angry = True
-            logger.warning(f"⚠️ Mood -25!")
+            logger.info(f"⚠️ Mood pending: -{gain}")
         
-        # ========== PHYSICAL TOUCH TRIGGERS ==========
+        # ========== PHYSICAL TOUCH TRIGGERS (langsung) ==========
         if any(k in msg_lower for k in ['pegang', 'sentuh', 'raba', 'elus']):
             self.arousal = min(100, self.arousal + 12)
             self.desire = min(100, self.desire + 8)
@@ -311,18 +316,76 @@ class EmotionalEngine:
         
         return changes
     
+    def apply_pending_emotion(self, emotion_type: str, intensity: float) -> Dict[str, float]:
+        """
+        Apply pending emotion from delay system.
+        Dipanggil oleh RealityEngine saat emosi siap dikeluarkan.
+        """
+        changes = {}
+        
+        if emotion_type == "cemburu":
+            old = self.cemburu
+            self.cemburu = min(100, self.cemburu + intensity)
+            self.mood = max(-50, self.mood - intensity / 5)
+            changes['cemburu'] = intensity
+            changes['mood'] = -intensity / 5
+            logger.info(f"💢 Cemburu applied: +{intensity:.1f} ({old:.0f} → {self.cemburu:.0f})")
+        
+        elif emotion_type == "kecewa":
+            old = self.kecewa
+            self.kecewa = min(100, self.kecewa + intensity)
+            self.mood = max(-50, self.mood - intensity / 4)
+            self.trust = max(0, self.trust - intensity / 5)
+            changes['kecewa'] = intensity
+            changes['mood'] = -intensity / 4
+            changes['trust'] = -intensity / 5
+            logger.info(f"💔 Kecewa applied: +{intensity:.1f} ({old:.0f} → {self.kecewa:.0f})")
+        
+        elif emotion_type == "curiga":
+            self.cemburu = min(100, self.cemburu + intensity * 0.7)
+            self.mood = max(-50, self.mood - intensity / 6)
+            changes['cemburu'] = intensity * 0.7
+            changes['mood'] = -intensity / 6
+            logger.info(f"🔍 Curiga applied: +{intensity*0.7:.1f}")
+        
+        elif emotion_type == "sayang":
+            self.sayang = min(100, self.sayang + intensity)
+            self.mood = min(50, self.mood + intensity / 5)
+            changes['sayang'] = intensity
+            logger.info(f"💜 Sayang applied: +{intensity:.1f}")
+        
+        elif emotion_type == "sedih":
+            self.mood = max(-50, self.mood - intensity / 3)
+            changes['mood'] = -intensity / 3
+            logger.info(f"😢 Sedih applied: -{intensity/3:.1f}")
+        
+        elif emotion_type == "mood":
+            self.mood = max(-50, min(50, self.mood + intensity))
+            changes['mood'] = intensity
+            logger.info(f"🎭 Mood applied: {intensity:+.1f}")
+        
+        elif emotion_type == "trust":
+            self.trust = max(0, min(100, self.trust + intensity))
+            changes['trust'] = intensity
+            logger.info(f"🤝 Trust applied: {intensity:+.1f}")
+        
+        self._limit_emotions()
+        self._record_history(trigger=f"Pending emotion: {emotion_type}+{intensity:.1f}")
+        
+        return changes
+    
     def update_from_response(self, response: str) -> None:
         """Update emosi dari respons VELORA sendiri"""
         resp_lower = response.lower()
         
         if any(k in resp_lower for k in ['ahh', 'uhh', 'hhngg', 'aahh']):
             self.arousal = min(100, self.arousal + 5)
-            logger.debug(f"🔥 Arousal +5")
+            logger.debug(f"🔥 Arousal +5 from moan")
         
         if any(k in resp_lower for k in ['kontol', 'memek', 'ngentot', 'crot', 'basah']):
             self.arousal = min(100, self.arousal + 8)
             self.desire = min(100, self.desire + 5)
-            logger.debug(f"🔥🔥 +8 arousal, +5 desire")
+            logger.debug(f"🔥🔥 +8 arousal, +5 desire from vulgar")
         
         self._limit_emotions()
     
@@ -331,7 +394,7 @@ class EmotionalEngine:
         if hours_inactive > 1:
             gain = self.rindu_growth_per_hour * hours_inactive
             self.rindu = min(100, self.rindu + gain)
-            logger.info(f"🌙 Rindu +{gain:.1f} from inactivity")
+            logger.info(f"🌙 Rindu +{gain:.1f} from inactivity ({hours_inactive:.1f}h)")
             self._record_history(trigger=f"Inactive {hours_inactive:.1f}h")
     
     def _limit_emotions(self) -> None:
@@ -506,6 +569,20 @@ GAYA BICARA: NEUTRAL (NORMAL)
 ╚══════════════════════════════════════════════════════════════╝
 """
     
+    def get_emotion_values(self) -> Dict[str, float]:
+        """Dapatkan semua nilai emosi dalam dict"""
+        return {
+            'sayang': self.sayang,
+            'rindu': self.rindu,
+            'trust': self.trust,
+            'mood': self.mood,
+            'desire': self.desire,
+            'arousal': self.arousal,
+            'tension': self.tension,
+            'cemburu': self.cemburu,
+            'kecewa': self.kecewa
+        }
+    
     def _record_history(self, trigger: str) -> None:
         """Rekam perubahan emosi ke history"""
         history = EmotionalHistory(
@@ -567,6 +644,8 @@ GAYA BICARA: NEUTRAL (NORMAL)
         self.is_angry = data.get('is_angry', False)
         self.is_hurt = data.get('is_hurt', False)
         self.is_waiting_for_apology = data.get('is_waiting_for_apology', False)
+        
+        self._limit_emotions()
 
 
 # =============================================================================
@@ -584,8 +663,16 @@ def get_emotional_engine() -> EmotionalEngine:
     return _emotional_engine
 
 
+def reset_emotional_engine() -> None:
+    """Reset emotional engine (untuk testing)"""
+    global _emotional_engine
+    _emotional_engine = None
+    logger.info("🔄 Emotional Engine reset")
+
+
 __all__ = [
     'EmotionalStyle',
     'EmotionalEngine',
-    'get_emotional_engine'
+    'get_emotional_engine',
+    'reset_emotional_engine'
 ]
