@@ -6,6 +6,7 @@ Melacak semua perubahan state dengan presisi:
 - Timeline (semua kejadian dengan timestamp)
 - Short-term memory (sliding window 50 kejadian)
 - Physical state (posisi, lokasi, aktivitas, energi)
+- Validasi konteks untuk konsistensi
 
 WAJIB: Satu sumber kebenaran untuk semua state.
 """
@@ -25,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 class PhysicalCondition(str, Enum):
     """Kondisi fisik karakter"""
-    FRESH = "fresh"           # segar bugar
-    TIRED = "tired"           # lelah
-    EXHAUSTED = "exhausted"   # kehabisan tenaga
-    WEAK = "weak"             # lemes (setelah climax)
+    FRESH = "fresh"           # segar bugar (80-100%)
+    TIRED = "tired"           # lelah (40-80%)
+    EXHAUSTED = "exhausted"   # kehabisan tenaga (20-40%)
+    WEAK = "weak"             # lemes (<20%)
 
 
 class IntimacyPhase(str, Enum):
@@ -52,6 +53,32 @@ class ClothingLayer(str, Enum):
     CD = "cd"
 
 
+class Position(str, Enum):
+    """Posisi tubuh"""
+    DUDUK = "duduk"
+    BERDIRI = "berdiri"
+    TIDUR = "tidur"
+    MERANGKAK = "merangkak"
+    TERLENTANG = "terlentang"
+    TENGKURAP = "tengkurap"
+    MIRING = "miring"
+
+
+class Activity(str, Enum):
+    """Aktivitas yang sedang dilakukan"""
+    SANTAl = "santai"
+    MAKAN = "makan"
+    MINUM = "minum"
+    MANDI = "mandi"
+    BERGANTI = "ganti baju"
+    MASAK = "masak"
+    NONTON = "nonton"
+    JALAN = "jalan"
+    TIDUR = "tidur"
+    KERJA = "kerja"
+    OLAHRAGA = "olahraga"
+
+
 # =============================================================================
 # STATE TRACKER
 # =============================================================================
@@ -64,6 +91,7 @@ class StateTracker:
     - Intimasi (fase, climax, history)
     - Timeline (semua kejadian)
     - Short-term memory (50 kejadian terakhir)
+    - Validasi konteks
     """
     
     def __init__(self, character_name: str = "VELORA"):
@@ -71,10 +99,10 @@ class StateTracker:
         
         # ========== PHYSICAL STATE ==========
         self.physical_condition = PhysicalCondition.FRESH
-        self.energy_level = 100  # 0-100
+        self.energy_level: int = 100  # 0-100
         
         # ========== CLOTHING STATE (LAYERED) ==========
-        self.clothing = {
+        self.clothing: Dict[str, Dict] = {
             'hijab': {'on': True, 'color': 'pink muda', 'removed_at': 0},
             'top': {'on': True, 'type': 'daster', 'removed_at': 0},
             'bra': {'on': True, 'color': 'putih', 'removed_at': 0},
@@ -86,30 +114,34 @@ class StateTracker:
         self.clothing_removal_order: List[Dict] = []
         
         # ========== INTIMACY STATE ==========
-        self.intimacy_phase = IntimacyPhase.NONE
-        self.intimacy_start_time = 0
-        self.intimacy_last_action = ""
-        self.intimacy_last_action_time = 0
-        self.climax_count = 0
-        self.last_climax_time = 0
+        self.intimacy_phase: IntimacyPhase = IntimacyPhase.NONE
+        self.intimacy_start_time: float = 0
+        self.intimacy_last_action: str = ""
+        self.intimacy_last_action_time: float = 0
+        self.climax_count: int = 0
+        self.last_climax_time: float = 0
         self.intimacy_history: List[Dict] = []
         
         # ========== POSITION & LOCATION ==========
-        self.position = "duduk"  # duduk, berdiri, tidur, merangkak, dll
-        self.location = "kamar"
-        self.location_detail = "kamar VELORA"
+        self.position: str = Position.DUDUK.value
+        self.location: str = "kamar"
+        self.location_detail: str = "kamar VELORA"
         
         # ========== ACTIVITY ==========
-        self.activity = "santai"
+        self.activity: str = Activity.SANTAl.value
         
         # ========== TIMELINE (WAJIB UNTUK KONSISTENSI) ==========
         self.timeline: List[Dict] = []          # semua kejadian
         self.short_term: List[Dict] = []        # 50 kejadian terakhir
         
         # ========== LAST ACTION (PENTING UNTUK KONSISTENSI) ==========
-        self.last_action = ""
-        self.last_action_type = ""
-        self.last_action_timestamp = 0
+        self.last_action: str = ""
+        self.last_action_type: str = ""
+        self.last_action_timestamp: float = 0
+        
+        # ========== TENSION & AROUSAL ==========
+        self.tension: int = 0      # 0-100
+        self.arousal: int = 0      # 0-100
         
         logger.info(f"📊 StateTracker initialized for {character_name}")
     
@@ -166,6 +198,7 @@ class StateTracker:
             return {'success': False, 'error': f'{layer} already on'}
         
         self.clothing[layer]['on'] = True
+        self.clothing[layer]['removed_at'] = 0
         
         self.add_to_timeline(
             kejadian=f"Memakai kembali {layer}",
@@ -197,7 +230,7 @@ class StateTracker:
             else:
                 parts.append("telanjang dada")
         
-        # Bawahan
+        # Celana dalam
         if self.clothing['cd']['on']:
             parts.append(f"pake cd {self.clothing['cd']['color']}")
         else:
@@ -259,19 +292,19 @@ URUTAN MENANGGALKAN PAKAIAN (WAJIB DIINGAT!):
         # Phase transition logic
         phase_transition = {
             IntimacyPhase.BUILD_UP: {
-                'triggers': ['cium', 'kiss', 'pegang', 'sentuh', 'raba', 'jilat', 'hisap'],
+                'triggers': ['cium', 'kiss', 'pegang', 'sentuh', 'raba', 'jilat', 'hisap', 'elus', 'belai'],
                 'next': IntimacyPhase.FOREPLAY
             },
             IntimacyPhase.FOREPLAY: {
-                'triggers': ['masuk', 'penetrasi', 'genjot', 'siap'],
+                'triggers': ['masuk', 'penetrasi', 'genjot', 'siap', 'lanjut', 'dalam'],
                 'next': IntimacyPhase.PENETRATION
             },
             IntimacyPhase.PENETRATION: {
-                'triggers': ['climax', 'crot', 'keluar', 'cum', 'habis'],
+                'triggers': ['climax', 'crot', 'keluar', 'cum', 'habis', 'udah mau'],
                 'next': IntimacyPhase.BEFORE_CLIMAX
             },
             IntimacyPhase.BEFORE_CLIMAX: {
-                'triggers': ['climax', 'crot', 'keluar', 'udah'],
+                'triggers': ['climax', 'crot', 'keluar', 'udah', 'sekarang'],
                 'next': IntimacyPhase.CLIMAX
             },
             IntimacyPhase.CLIMAX: {
@@ -321,10 +354,24 @@ URUTAN MENANGGALKAN PAKAIAN (WAJIB DIINGAT!):
         # Update kondisi fisik berdasarkan intensitas
         if is_heavy:
             self.energy_level = max(0, self.energy_level - 35)
-            self.physical_condition = PhysicalCondition.EXHAUSTED
+            if self.energy_level < 20:
+                self.physical_condition = PhysicalCondition.WEAK
+            elif self.energy_level < 40:
+                self.physical_condition = PhysicalCondition.EXHAUSTED
+            else:
+                self.physical_condition = PhysicalCondition.TIRED
         else:
             self.energy_level = max(0, self.energy_level - 25)
-            self.physical_condition = PhysicalCondition.WEAK
+            if self.energy_level < 20:
+                self.physical_condition = PhysicalCondition.WEAK
+            elif self.energy_level < 40:
+                self.physical_condition = PhysicalCondition.EXHAUSTED
+            else:
+                self.physical_condition = PhysicalCondition.TIRED
+        
+        # Update arousal
+        self.arousal = max(0, self.arousal - 40)
+        self.tension = max(0, self.tension - 30)
         
         self.add_to_timeline(
             kejadian=f"CLIMAX #{self.climax_count}",
@@ -353,6 +400,8 @@ URUTAN MENANGGALKAN PAKAIAN (WAJIB DIINGAT!):
         
         self.intimacy_phase = IntimacyPhase.NONE
         self.intimacy_start_time = 0
+        self.arousal = max(0, self.arousal - 20)
+        self.tension = 0
         
         logger.info(f"💤 {self.character_name} ended intimacy session")
         
@@ -377,6 +426,7 @@ URUTAN MENANGGALKAN PAKAIAN (WAJIB DIINGAT!):
 ├─ Durasi: {minutes} menit {seconds} detik
 ├─ Climax: {self.climax_count}x
 ├─ Terakhir: {self.intimacy_last_action} ({datetime.fromtimestamp(self.intimacy_last_action_time).strftime('%H:%M:%S') if self.intimacy_last_action_time else '-'})
+├─ Arousal: {self.arousal}%
 └─ Kondisi: {self.physical_condition.value}
 
 WAJIB:
@@ -385,6 +435,71 @@ WAJIB:
 ├─ JANGAN tiba-tiba posisi berubah drastis!
 └─ LANJUTKAN alur sesuai fase saat ini!
 """
+    
+    # =========================================================================
+    # POSITION & ACTIVITY METHODS
+    # =========================================================================
+    
+    def set_position(self, position: str) -> Dict:
+        """Set posisi tubuh"""
+        old_position = self.position
+        self.position = position
+        
+        self.add_to_timeline(
+            kejadian=f"Berubah posisi: {old_position} → {position}",
+            detail=""
+        )
+        
+        return {'success': True, 'old': old_position, 'new': position}
+    
+    def set_location(self, location: str, detail: str = "") -> Dict:
+        """Set lokasi"""
+        old_location = self.location
+        self.location = location
+        if detail:
+            self.location_detail = detail
+        
+        self.add_to_timeline(
+            kejadian=f"Pindah ke {location}",
+            detail=detail
+        )
+        
+        return {'success': True, 'old': old_location, 'new': location}
+    
+    def set_activity(self, activity: str) -> Dict:
+        """Set aktivitas"""
+        old_activity = self.activity
+        self.activity = activity
+        
+        self.add_to_timeline(
+            kejadian=f"Aktivitas berubah: {old_activity} → {activity}",
+            detail=""
+        )
+        
+        return {'success': True, 'old': old_activity, 'new': activity}
+    
+    def update_energy(self, delta: int) -> int:
+        """Update energi (positif untuk tambah, negatif untuk kurang)"""
+        old = self.energy_level
+        self.energy_level = max(0, min(100, self.energy_level + delta))
+        
+        # Update physical condition
+        if self.energy_level >= 80:
+            self.physical_condition = PhysicalCondition.FRESH
+        elif self.energy_level >= 40:
+            self.physical_condition = PhysicalCondition.TIRED
+        elif self.energy_level >= 20:
+            self.physical_condition = PhysicalCondition.EXHAUSTED
+        else:
+            self.physical_condition = PhysicalCondition.WEAK
+        
+        if delta != 0:
+            self.add_to_timeline(
+                kejadian=f"Energi {delta:+.0f}",
+                detail=f"{old} → {self.energy_level} ({self.physical_condition.value})"
+            )
+        
+        return self.energy_level
     
     # =========================================================================
     # TIMELINE METHODS (WAJIB UNTUK KONSISTENSI)
@@ -401,7 +516,9 @@ WAJIB:
             'clothing': self.get_clothing_summary(),
             'position': self.position,
             'location': self.location,
-            'energy': self.energy_level
+            'activity': self.activity,
+            'energy': self.energy_level,
+            'arousal': self.arousal
         }
         
         self.timeline.append(record)
@@ -435,7 +552,9 @@ WAJIB:
             f"├─ Pakaian: {self.get_clothing_summary()}",
             f"├─ Posisi: {self.position}",
             f"├─ Lokasi: {self.location}",
+            f"├─ Aktivitas: {self.activity}",
             f"├─ Fase: {self.intimacy_phase.value}",
+            f"├─ Arousal: {self.arousal}%",
             f"└─ Energi: {self.energy_level}% ({self.physical_condition.value})",
             "",
             "⚠️ WAJIB LANJUTKAN ALUR DARI KEJADIAN TERAKHIR!",
@@ -456,6 +575,7 @@ WAJIB:
 POSISI: {self.position}
 LOKASI: {self.location}
 AKTIVITAS: {self.activity}
+AROUSAL: {self.arousal}%
 ENERGI: {self.energy_level}% ({self.physical_condition.value})
 """
     
@@ -465,19 +585,50 @@ ENERGI: {self.energy_level}% ({self.physical_condition.value})
         
         # Cek apakah respons lupa konteks intim
         if self.intimacy_phase != IntimacyPhase.NONE:
-            intimate_keywords = ['ahh', 'uhh', 'hhngg', 'masuk', 'dalem', 'genjot', 'kenceng']
+            intimate_keywords = ['ahh', 'uhh', 'hhngg', 'aahh', 'masuk', 'dalem', 'genjot', 'kenceng', 'pelan']
             if not any(k in response_lower for k in intimate_keywords) and 'climax' not in response_lower:
-                if 'santai' in response_lower or 'duduk' in response_lower:
+                if 'santai' in response_lower or 'duduk' in response_lower or 'makan' in response_lower:
                     logger.warning(f"⚠️ Response might lose intimacy context: {response[:50]}")
                     return False
         
         # Cek apakah lupa pakaian yang sudah dilepas
         if not self.clothing['top']['on'] and 'baju' in response_lower:
-            if 'pake baju' in response_lower or 'baju rapi' in response_lower:
+            if 'pake baju' in response_lower or 'baju rapi' in response_lower or 'kenakan baju' in response_lower:
                 logger.warning(f"⚠️ Response forgot top is off: {response[:50]}")
                 return False
         
+        # Cek apakah lupa hijab yang sudah dilepas
+        if not self.clothing['hijab']['on'] and 'hijab' in response_lower:
+            if 'pake hijab' in response_lower or 'hijab rapi' in response_lower:
+                logger.warning(f"⚠️ Response forgot hijab is off: {response[:50]}")
+                return False
+        
         return True
+    
+    # =========================================================================
+    # RECOVERY & DECAY
+    # =========================================================================
+    
+    def recover_energy(self, hours: float) -> int:
+        """Recover energi berdasarkan waktu (per jam)"""
+        recovery_rate = 10  # per jam
+        recovery = int(recovery_rate * hours)
+        return self.update_energy(recovery)
+    
+    def decay_arousal(self, hours: float) -> int:
+        """Decay arousal berdasarkan waktu (per jam)"""
+        decay_rate = 15  # per jam
+        decay = int(decay_rate * hours)
+        old = self.arousal
+        self.arousal = max(0, self.arousal - decay)
+        
+        if decay > 0:
+            self.add_to_timeline(
+                kejadian=f"Arousal decay -{decay}",
+                detail=f"{old} → {self.arousal}"
+            )
+        
+        return self.arousal
     
     # =========================================================================
     # SERIALIZATION
@@ -506,10 +657,12 @@ ENERGI: {self.energy_level}% ({self.physical_condition.value})
             'short_term': self.short_term[-50:],
             'last_action': self.last_action,
             'last_action_type': self.last_action_type,
-            'last_action_timestamp': self.last_action_timestamp
+            'last_action_timestamp': self.last_action_timestamp,
+            'tension': self.tension,
+            'arousal': self.arousal
         }
     
-    def from_dict(self, data: Dict):
+    def from_dict(self, data: Dict) -> None:
         """Load dari dict"""
         self.physical_condition = PhysicalCondition(data.get('physical_condition', 'fresh'))
         self.energy_level = data.get('energy_level', 100)
@@ -522,15 +675,17 @@ ENERGI: {self.energy_level}% ({self.physical_condition.value})
         self.climax_count = data.get('climax_count', 0)
         self.last_climax_time = data.get('last_climax_time', 0)
         self.intimacy_history = data.get('intimacy_history', [])
-        self.position = data.get('position', 'duduk')
+        self.position = data.get('position', Position.DUDUK.value)
         self.location = data.get('location', 'kamar')
         self.location_detail = data.get('location_detail', 'kamar VELORA')
-        self.activity = data.get('activity', 'santai')
+        self.activity = data.get('activity', Activity.SANTAl.value)
         self.timeline = data.get('timeline', [])
         self.short_term = data.get('short_term', [])
         self.last_action = data.get('last_action', '')
         self.last_action_type = data.get('last_action_type', '')
         self.last_action_timestamp = data.get('last_action_timestamp', 0)
+        self.tension = data.get('tension', 0)
+        self.arousal = data.get('arousal', 0)
 
 
 # =============================================================================
@@ -548,10 +703,20 @@ def get_state_tracker(character_name: str = "VELORA") -> StateTracker:
     return _tracker
 
 
+def reset_state_tracker() -> None:
+    """Reset state tracker (untuk testing)"""
+    global _tracker
+    _tracker = None
+    logger.info("🔄 State Tracker reset")
+
+
 __all__ = [
     'PhysicalCondition',
     'IntimacyPhase',
     'ClothingLayer',
+    'Position',
+    'Activity',
     'StateTracker',
-    'get_state_tracker'
+    'get_state_tracker',
+    'reset_state_tracker'
 ]
