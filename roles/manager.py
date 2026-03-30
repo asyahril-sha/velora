@@ -8,6 +8,7 @@ import time
 import json
 import logging
 import asyncio
+import re
 from typing import Dict, List, Optional, Any
 
 from roles.base import BaseRole
@@ -124,6 +125,26 @@ class RoleManager:
     def get_role_by_type(self, role_type: str) -> List[BaseRole]:
         """Dapatkan semua role dengan tipe tertentu"""
         return [r for r in self.roles.values() if r.role_type == role_type]
+
+    def _clean_markdown(self, text: str) -> str:
+        """Bersihkan semua karakter Markdown yang bermasalah"""
+        if not text:
+            return ""
+    
+        # Hapus semua karakter Markdown yang bermasalah
+        text = re.sub(r'[*_`]', '', text)
+    
+        # Ganti karakter kurung
+        text = text.replace('[', '(').replace(']', ')')
+        text = text.replace('(', '').replace(')', '')
+    
+        # Hapus karakter kontrol
+        text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    
+        # Hapus multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+    
+        return text.strip()
     
     # =========================================================================
     # ACTIVE ROLE MANAGEMENT
@@ -134,8 +155,6 @@ class RoleManager:
         Switch ke role tertentu.
         Returns: pesan greeting dari role
         """
-        import re
-        
         if role_id not in self.roles:
             return f"Role '{role_id}' tidak ditemukan. Pilih dari: {', '.join(self.roles.keys())}"
     
@@ -165,10 +184,10 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
         
             # ========== PEMBERSIHAN MARKDOWN ==========
             # Bersihkan greeting dari semua karakter Markdown
-            greeting_clean = re.sub(r'[*_`]', '', greeting)
-            greeting_clean = greeting_clean.replace('"', "'")
-        
-            hubungan_clean = re.sub(r'[*_`]', '', role.hubungan_dengan_nova)
+            greeting = role.get_greeting()
+            greeting_clean = self._clean_markdown(greeting)
+
+            hubungan_clean = self._clean_markdown(role.hubungan_dengan_nova)
             # ========================================
         
             # Format respons berdasarkan tipe role
@@ -180,7 +199,7 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
                 return f"""
 💆‍♀️ **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
-{role.hubungan_dengan_nova}
+{hubungan_clean}
 
 {greeting_clean}
 
@@ -347,7 +366,7 @@ Ketik **/batal** untuk kembali ke Nova.
         # Cek level up
         if update_result.get('level_up'):
             level_baru = update_result.get('new_level', role.relationship.level)
-            notif = f"✨ **Level naik ke {level_baru}/12!** ✨\n\n"
+            notif = f"✨ Level naik ke {level_baru}/12!** ✨\n\n"
         else:
             notif = ""
         
@@ -363,17 +382,21 @@ Ketik **/batal** untuk kembali ke Nova.
             
             # Panggil AI untuk generate response
             response = await role.generate_response(message, context)
-            
+
+            # ========== CLEAN MARKDOWN ==========
+            safe_response = self._clean_markdown(response)
+
             # Save response ke conversation
             if role.conversations:
                 role.conversations[-1]['role'] = response[:200]
             
-            return notif + response
+            return notif + safe_response
             
         except Exception as e:
             logger.error(f"Error generating response for {role_id}: {e}", exc_info=True)
-            # Fallback ke greeting
-            return notif + role.get_greeting()
+            # Fallback ke greeting yang sudah dibersihkan
+            safe_greeting = self._clean_markdown(role.get_greeting())
+            return notif + safe_greeting
     
     # =========================================================================
     # AUTO SCENE MANAGEMENT
