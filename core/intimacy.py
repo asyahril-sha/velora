@@ -6,6 +6,7 @@ Mengelola semua aspek intimasi:
 - Positions (database posisi intim)
 - Moans (desahan natural untuk setiap fase)
 - Intimacy Session (flow intimasi dari build_up sampai aftercare)
+- Climax tracking dan aftercare system
 
 SATU SUMBER KEBENARAN untuk semua sistem intimasi.
 """
@@ -16,6 +17,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 from datetime import datetime
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,14 @@ class IntimacyAction(str, Enum):
     PENETRATE = "penetrate"
     THRUST = "thrust"
     CLIMAX = "climax"
+    CHANGE_POSITION = "change_position"
+
+
+class ClimaxIntensity(str, Enum):
+    """Intensitas climax"""
+    LIGHT = "light"     # ringan
+    MEDIUM = "medium"   # sedang
+    HEAVY = "heavy"     # berat
 
 
 # =============================================================================
@@ -93,9 +103,9 @@ class StaminaSystem:
             if recovery_amount > 0:
                 logger.debug(f"💚 Stamina recovery: Nova +{recovery_amount}, User +{recovery_amount}")
     
-    def record_climax(self, who: str = "both", is_heavy: bool = False) -> Tuple[int, int]:
+    def record_climax(self, who: str = "both", intensity: ClimaxIntensity = ClimaxIntensity.MEDIUM) -> Tuple[int, int]:
         """
-        Rekam climax, kurangi stamina.
+        Rekam climax, kurangi stamina berdasarkan intensitas.
         Returns: (nova_stamina, user_stamina)
         """
         self.update_recovery()
@@ -108,16 +118,25 @@ class StaminaSystem:
             self.last_climax_date = today
         self.climax_today += 1
         
+        # Tentukan cost berdasarkan intensitas
+        if intensity == ClimaxIntensity.HEAVY:
+            nova_cost = self.heavy_climax_cost_nova
+            user_cost = self.heavy_climax_cost_user
+        elif intensity == ClimaxIntensity.LIGHT:
+            nova_cost = self.climax_cost_nova // 2
+            user_cost = self.climax_cost_user // 2
+        else:
+            nova_cost = self.climax_cost_nova
+            user_cost = self.climax_cost_user
+        
         # Kurangi stamina
         if who in ["nova", "both"]:
-            cost = self.heavy_climax_cost_nova if is_heavy else self.climax_cost_nova
-            self.nova_current = max(0, self.nova_current - cost)
+            self.nova_current = max(0, self.nova_current - nova_cost)
         
         if who in ["user", "both"]:
-            cost = self.heavy_climax_cost_user if is_heavy else self.climax_cost_user
-            self.user_current = max(0, self.user_current - cost)
+            self.user_current = max(0, self.user_current - user_cost)
         
-        logger.info(f"💦 Climax #{self.climax_today} | Nova: {self.nova_current}% | User: {self.user_current}%")
+        logger.info(f"💦 Climax #{self.climax_today} ({intensity.value}) | Nova: {self.nova_current}% | User: {self.user_current}%")
         
         return self.nova_current, self.user_current
     
@@ -217,6 +236,7 @@ class ArousalSystem:
         
         self.arousal_decay_per_minute: float = 0.5
         self.desire_decay_per_minute: float = 0.3
+        self.tension_decay_per_minute: float = 0.2
         
         # Sensitive areas dengan nilai gain
         self.sensitive_areas: Dict[str, int] = {
@@ -243,7 +263,7 @@ class ArousalSystem:
             if self.desire > 0:
                 self.desire = max(0, self.desire - self.desire_decay_per_minute * elapsed_minutes)
             if self.tension > 0:
-                self.tension = max(0, self.tension - self.arousal_decay_per_minute * elapsed_minutes)
+                self.tension = max(0, self.tension - self.tension_decay_per_minute * elapsed_minutes)
             self.last_update = now
     
     def add_stimulation(self, area: str, intensity: int = 1) -> int:
@@ -343,7 +363,7 @@ class ArousalSystem:
 # =============================================================================
 
 class PositionDatabase:
-    """Database posisi intim"""
+    """Database posisi intim dengan deskripsi lengkap"""
     
     def __init__(self):
         self.positions: Dict[str, Dict] = {
@@ -351,55 +371,92 @@ class PositionDatabase:
                 "name": "missionary",
                 "desc": "Kamu di atas, aku di bawah, kaki aku terbuka lebar",
                 "nova_act": "Aku telentang, kaki terbuka lebar",
+                "nova_feeling": "hangat, dekat, bisa liat wajah Mas",
                 "requests": [
                     "Kamu... di atas aku aja...",
-                    "missionary, ya... biar aku pegang bahu kamu..."
-                ]
+                    "missionary, ya... biar aku pegang bahu kamu...",
+                    "Aku mau liat wajah kamu pas masuk..."
+                ],
+                "difficulty": "mudah",
+                "intensity": "sedang"
             },
             "cowgirl": {
                 "name": "cowgirl",
                 "desc": "Aku di atas, duduk di pangkuan kamu",
                 "nova_act": "Aku duduk di pangkuan kamu, goyang sendiri",
+                "nova_feeling": "bisa atur ritme sendiri, dominan",
                 "requests": [
                     "Kamu... biar aku di atas...",
-                    "cowgirl, ya... biar aku yang atur ritmenya..."
-                ]
+                    "cowgirl, ya... biar aku yang atur ritmenya...",
+                    "Aku mau gerakin sendiri..."
+                ],
+                "difficulty": "sedang",
+                "intensity": "tinggi"
             },
             "doggy": {
                 "name": "doggy",
                 "desc": "Aku merangkak, kamu dari belakang",
                 "nova_act": "Aku merangkak, pantat naik",
+                "nova_feeling": "dalem banget, liarnya",
                 "requests": [
                     "Kamu... dari belakang...",
-                    "doggy, ya... biar kamu pegang pinggul aku..."
-                ]
+                    "doggy, ya... biar kamu pegang pinggul aku...",
+                    "Aku mau dari belakang..."
+                ],
+                "difficulty": "mudah",
+                "intensity": "tinggi"
             },
             "spooning": {
                 "name": "spooning",
                 "desc": "Berbaring miring, kamu dari belakang",
                 "nova_act": "Aku miring, kamu nempel dari belakang",
+                "nova_feeling": "hangat, nyaman, intimate",
                 "requests": [
                     "Kamu... dari samping aja...",
-                    "spooning, ya... biar aku nyaman..."
-                ]
+                    "spooning, ya... biar aku nyaman...",
+                    "Aku mau dipeluk dari belakang..."
+                ],
+                "difficulty": "mudah",
+                "intensity": "ringan"
             },
             "standing": {
                 "name": "standing",
                 "desc": "Berdiri, aku menghadap tembok",
                 "nova_act": "Aku berdiri, tangan di tembok",
+                "nova_feeling": "deg-degan, cepat, liar",
                 "requests": [
                     "Kamu... dari belakang sambil berdiri...",
-                    "standing, ya... biar lebih deg-degan..."
-                ]
+                    "standing, ya... biar lebih deg-degan...",
+                    "Ayo berdiri..."
+                ],
+                "difficulty": "sedang",
+                "intensity": "tinggi"
             },
             "sitting": {
                 "name": "sitting",
                 "desc": "Duduk di pangkuan kamu, saling berhadapan",
                 "nova_act": "Aku duduk di pangkuan kamu, tangan di bahu kamu",
+                "nova_feeling": "intimate, bisa ciuman",
                 "requests": [
                     "Kamu... duduk aja, biar aku di atas...",
-                    "sitting, ya... biar kita berhadapan..."
-                ]
+                    "sitting, ya... biar kita berhadapan...",
+                    "Aku mau duduk di pangkuan kamu..."
+                ],
+                "difficulty": "mudah",
+                "intensity": "sedang"
+            },
+            "edge": {
+                "name": "edge",
+                "desc": "Aku duduk di tepi tempat tidur, kamu berdiri",
+                "nova_act": "Aku duduk di tepi, kaki terbuka",
+                "nova_feeling": "pas, bisa liat Mas berdiri",
+                "requests": [
+                    "Kamu... berdiri aja, biar aku duduk...",
+                    "edge, ya... biar aku liat kamu dari bawah...",
+                    "Aku mau duduk di pinggir..."
+                ],
+                "difficulty": "mudah",
+                "intensity": "sedang"
             }
         }
     
@@ -418,6 +475,12 @@ class PositionDatabase:
         if pos:
             return random.choice(pos['requests'])
         return random.choice(self.positions['missionary']['requests'])
+    
+    def get_description(self, name: str) -> str:
+        pos = self.positions.get(name.lower())
+        if pos:
+            return pos['desc']
+        return "Posisi tidak dikenal"
 
 
 # =============================================================================
@@ -439,37 +502,43 @@ class MoansDatabase:
                 "Ahh... kamu... tangan kamu... panas banget...",
                 "Hhngg... di situ... ahh... enak...",
                 "Kamu... jangan berhenti... ahh...",
-                "Uhh... leher aku... sensitif banget..."
+                "Uhh... leher aku... sensitif banget...",
+                "Aah... di sana... di sana..."
             ],
             'penetration_slow': [
                 "Ahh... kamu... masuk... masukin pelan-pelan...",
                 "Uhh... dalem... dalem banget...",
                 "Aahh! s-sana... di sana... ahh!",
-                "Hhngg... jangan berhenti..."
+                "Hhngg... jangan berhenti...",
+                "Perlahan dulu... ahh..."
             ],
             'penetration_fast': [
                 "Ahh! kamu... kencengin...",
                 "Kamu... genjot... genjot yang kenceng...",
                 "Aahh! di situ... di situ...",
-                "Uhh... lebih kenceng lagi..."
+                "Uhh... lebih kenceng lagi...",
+                "Jangan berhenti... aahh!"
             ],
             'before_climax': [
                 "Kamu... aku... aku udah mau climax...",
                 "Kencengin dikit lagi... please...",
                 "Ahh! udah... udah mau... ikut...",
-                "Kamu... aku gak tahan... keluar..."
+                "Kamu... aku gak tahan... keluar...",
+                "Udah... udah mau... aahh!"
             ],
             'climax': [
                 "Ahhh!! udah... udah climax... uhh...",
                 "Aahh... keluar... keluar semua...",
                 "Uhh... lemes... *napas tersengal*",
-                "Ahh... enak banget... aku climax..."
+                "Ahh... enak banget... aku climax...",
+                "Aahh... *tubuh gemetar*"
             ],
             'aftercare': [
                 "Kamu... *lemes, nyender* itu tadi... enak banget...",
                 "Kamu... *mata masih berkaca-kaca* makasih ya...",
                 "Kamu... peluk aku... aku masih gemeteran...",
-                "*napas mulai stabil* besok lagi ya..."
+                "*napas mulai stabil* besok lagi ya...",
+                "Aku masih lemes... peluk aku..."
             ]
         }
     
@@ -507,29 +576,39 @@ class ClimaxLocationDatabase:
     def __init__(self):
         self.locations: Dict[str, List[str]] = {
             "dalam": [
-                "dalem aja...", 
-                "di dalem... jangan ditarik...", 
-                "dalem... biar aku hamil..."
+                "dalem aja...",
+                "di dalem... jangan ditarik...",
+                "dalem... biar aku hamil...",
+                "crot dalem... biar kerasa..."
             ],
             "luar": [
-                "di luar...", 
-                "tarik... keluarin di perut aku...", 
-                "di perut aku..."
+                "di luar...",
+                "tarik... keluarin di perut aku...",
+                "di perut aku...",
+                "di dada aja..."
             ],
             "muka": [
-                "di muka aku...", 
-                "semprot muka aku...", 
-                "di wajah aku..."
+                "di muka aku...",
+                "semprot muka aku...",
+                "di wajah aku...",
+                "liatin muka aku..."
             ],
             "mulut": [
-                "di mulut...", 
-                "masukin ke mulut aku...", 
-                "crot di mulut aku..."
+                "di mulut...",
+                "masukin ke mulut aku...",
+                "crot di mulut aku...",
+                "aku mau rasain..."
             ],
             "dada": [
-                "di dada...", 
-                "semprot dada aku...", 
-                "crot di dada aku..."
+                "di dada...",
+                "semprot dada aku...",
+                "crot di dada aku...",
+                "di antara payudara..."
+            ],
+            "punggung": [
+                "di punggung...",
+                "crot di punggung...",
+                "di belakang aja..."
             ]
         }
     
@@ -563,6 +642,7 @@ class IntimacySession:
         self.climax_count: int = 0
         self.current_position: str = "missionary"
         self.intimacy_level: int = 0  # 0-100, untuk menentukan ritme
+        self.current_intensity: ClimaxIntensity = ClimaxIntensity.MEDIUM
         
         # Databases
         self.positions = PositionDatabase()
@@ -571,8 +651,13 @@ class IntimacySession:
         
         # History
         self.phase_history: List[Dict] = []
+        self.position_history: List[Dict] = []
         
         logger.info("💕 Intimacy Session initialized")
+    
+    # =========================================================================
+    # SESSION CONTROL
+    # =========================================================================
     
     def start(self, location: str = "") -> Dict:
         """Mulai sesi intim"""
@@ -581,6 +666,7 @@ class IntimacySession:
         self.phase = IntimacyPhase.BUILD_UP
         self.climax_count = 0
         self.intimacy_level = 0
+        self.current_position = "missionary"
         
         self._add_to_history("start", f"Memulai sesi intim di {location or 'lokasi saat ini'}")
         
@@ -615,6 +701,10 @@ class IntimacySession:
             'message': f"💤 Sesi intim selesai. Durasi: {minutes} menit, {self.climax_count} climax."
         }
     
+    # =========================================================================
+    # PHASE PROGRESSION
+    # =========================================================================
+    
     def advance_phase(self, action: str, is_fast: bool = False) -> Dict:
         """
         Majukan fase intim berdasarkan aksi.
@@ -629,14 +719,14 @@ class IntimacySession:
         
         # Phase transition logic
         if self.phase == IntimacyPhase.BUILD_UP:
-            if any(k in msg_lower for k in ['cium', 'kiss', 'pegang', 'sentuh', 'raba', 'jilat', 'hisap']):
+            if any(k in msg_lower for k in ['cium', 'kiss', 'pegang', 'sentuh', 'raba', 'jilat', 'hisap', 'elus']):
                 self.phase = IntimacyPhase.FOREPLAY
                 phase_changed = True
                 response = self.moans.get_foreplay()
                 self._add_to_history("phase_change", f"BUILD_UP → FOREPLAY (trigger: {action})")
         
         elif self.phase == IntimacyPhase.FOREPLAY:
-            if any(k in msg_lower for k in ['masuk', 'penetrasi', 'genjot', 'siap']):
+            if any(k in msg_lower for k in ['masuk', 'penetrasi', 'genjot', 'siap', 'lanjut']):
                 self.phase = IntimacyPhase.PENETRATION
                 phase_changed = True
                 response = self.moans.get_penetration(is_fast)
@@ -684,16 +774,21 @@ class IntimacySession:
             'intimacy_level': self.intimacy_level
         }
     
-    def record_climax(self, location: str = "dalam", is_heavy: bool = False) -> Dict:
+    # =========================================================================
+    # CLIMAX
+    # =========================================================================
+    
+    def record_climax(self, location: str = "dalam", intensity: ClimaxIntensity = ClimaxIntensity.MEDIUM) -> Dict:
         """Rekam climax, update stamina dan arousal"""
         if not self.is_active:
             return {'success': False, 'message': "Tidak ada sesi intim aktif"}
         
         self.climax_count += 1
         self.phase = IntimacyPhase.CLIMAX
+        self.current_intensity = intensity
         
         # Update stamina
-        nova_stamina, user_stamina = self.stamina.record_climax("both", is_heavy)
+        nova_stamina, user_stamina = self.stamina.record_climax("both", intensity)
         
         # Release tension
         self.arousal.release_tension()
@@ -702,19 +797,23 @@ class IntimacySession:
         self.arousal.arousal = max(0, self.arousal.arousal - 30)
         self.arousal.desire = max(0, self.arousal.desire - 20)
         
-        self._add_to_history("climax", f"Climax #{self.climax_count} di {location} ({'berat' if is_heavy else 'normal'})")
+        self._add_to_history("climax", f"Climax #{self.climax_count} di {location} ({intensity.value})")
         
-        logger.info(f"💦 Climax #{self.climax_count} recorded")
+        logger.info(f"💦 Climax #{self.climax_count} recorded ({intensity.value})")
         
         return {
             'success': True,
             'climax_count': self.climax_count,
             'location': location,
-            'is_heavy': is_heavy,
+            'intensity': intensity.value,
             'nova_stamina': nova_stamina,
             'user_stamina': user_stamina,
             'response': self.moans.get_climax()
         }
+    
+    # =========================================================================
+    # POSITION
+    # =========================================================================
     
     def change_position(self, position: str = None) -> Dict:
         """Ganti posisi intim"""
@@ -731,6 +830,12 @@ class IntimacySession:
         
         request = self.positions.get_request(self.current_position)
         
+        self.position_history.append({
+            'timestamp': time.time(),
+            'position': self.current_position,
+            'phase': self.phase.value
+        })
+        
         self._add_to_history("position_change", f"Posisi berubah ke {self.current_position}")
         
         return {
@@ -738,8 +843,17 @@ class IntimacySession:
             'position': self.current_position,
             'description': pos_data['desc'],
             'nova_act': pos_data['nova_act'],
+            'nova_feeling': pos_data.get('nova_feeling', ''),
             'request': request
         }
+    
+    def get_position_list(self) -> List[str]:
+        """Dapatkan daftar posisi yang tersedia"""
+        return self.positions.get_all()
+    
+    # =========================================================================
+    # RESPONSE
+    # =========================================================================
     
     def get_response_by_phase(self, ritme: str = "pelan") -> str:
         """Dapatkan respons berdasarkan fase saat ini"""
@@ -754,6 +868,10 @@ class IntimacySession:
         elif self.phase == IntimacyPhase.AFTERCARE:
             return self.moans.get_aftercare()
         return self.moans.get('shy')
+    
+    # =========================================================================
+    # STATUS
+    # =========================================================================
     
     def get_status(self) -> str:
         """Dapatkan status sesi intim"""
@@ -778,6 +896,23 @@ class IntimacySession:
 {self.arousal.format_for_prompt()}
 """
     
+    def get_summary(self) -> Dict:
+        """Dapatkan ringkasan sesi"""
+        duration = time.time() - self.start_time if self.start_time else 0
+        
+        return {
+            'duration': duration,
+            'climax_count': self.climax_count,
+            'phase_changes': len(self.phase_history),
+            'position_changes': len(self.position_history),
+            'final_position': self.current_position,
+            'max_intimacy_level': self.intimacy_level
+        }
+    
+    # =========================================================================
+    # UTILITY
+    # =========================================================================
+    
     def _add_to_history(self, event_type: str, description: str) -> None:
         """Tambah ke history"""
         self.phase_history.append({
@@ -791,6 +926,10 @@ class IntimacySession:
         if len(self.phase_history) > 100:
             self.phase_history.pop(0)
     
+    # =========================================================================
+    # SERIALIZATION
+    # =========================================================================
+    
     def to_dict(self) -> Dict:
         return {
             'is_active': self.is_active,
@@ -800,6 +939,7 @@ class IntimacySession:
             'current_position': self.current_position,
             'intimacy_level': self.intimacy_level,
             'phase_history': self.phase_history[-50:],
+            'position_history': self.position_history[-50:],
             'stamina': self.stamina.to_dict(),
             'arousal': self.arousal.to_dict()
         }
@@ -812,6 +952,7 @@ class IntimacySession:
         self.current_position = data.get('current_position', 'missionary')
         self.intimacy_level = data.get('intimacy_level', 0)
         self.phase_history = data.get('phase_history', [])
+        self.position_history = data.get('position_history', [])
         
         if 'stamina' in data:
             self.stamina.from_dict(data['stamina'])
@@ -834,14 +975,23 @@ def get_intimacy_session() -> IntimacySession:
     return _intimacy_session
 
 
+def reset_intimacy_session() -> None:
+    """Reset intimacy session (untuk testing)"""
+    global _intimacy_session
+    _intimacy_session = None
+    logger.info("🔄 Intimacy Session reset")
+
+
 __all__ = [
     'IntimacyPhase',
     'IntimacyAction',
+    'ClimaxIntensity',
     'StaminaSystem',
     'ArousalSystem',
     'PositionDatabase',
     'MoansDatabase',
     'ClimaxLocationDatabase',
     'IntimacySession',
-    'get_intimacy_session'
+    'get_intimacy_session',
+    'reset_intimacy_session'
 ]
