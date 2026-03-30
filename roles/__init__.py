@@ -15,34 +15,21 @@ Role definitions:
 """
 
 from .base import BaseRole, get_role_awareness_level
-
 from .nova import NovaRole, create_nova
-
 from .ipar import IparRole, create_ipar
-
 from .teman_kantor import TemanKantorRole, create_teman_kantor
-
 from .pelakor import PelakorRole, create_pelakor
-
 from .istri_orang import IstriOrangRole, create_istri_orang
+from .pijat_plus_plus import PijatPlusPlusRole, create_aghnia_punjabi, create_munira_agile
+from .pelacur import PelacurRole, create_davina_karamoy, create_sallsa_binta
+from .manager import RoleManager, get_role_manager, reset_role_manager
 
-from .pijat_plus_plus import (
-    PijatPlusPlusRole,
-    create_aghnia_punjabi,
-    create_munira_agile
-)
-
-from .pelacur import (
-    PelacurRole,
-    create_davina_karamoy,
-    create_sallsa_binta
-)
-
-from .provider import (
+# Import dari core/service_provider.py, bukan dari roles.provider
+from core.service_provider import (
     ServiceType,
     ServiceStatus,
     AutoSceneType,
-    CustomerTier,
+    CustomerTier,           # <--- INI dari core/service_provider.py
     Customer,
     FlatEmotionalEngine,
     ProfessionalRelationship,
@@ -50,7 +37,8 @@ from .provider import (
     format_price
 )
 
-from .manager import RoleManager, get_role_manager, reset_role_manager
+# Jangan import dari .provider karena tidak ada
+# from .provider import (...)
 
 __all__ = [
     # Base
@@ -87,7 +75,7 @@ __all__ = [
     "create_davina_karamoy",
     "create_sallsa_binta",
     
-    # Provider Base
+    # Provider Base (dari core/service_provider.py)
     "ServiceType",
     "ServiceStatus",
     "AutoSceneType",
