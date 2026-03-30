@@ -294,6 +294,39 @@ Ketik **/batal** untuk kembali ke Nova.
             elif msg_lower == "/deal_sex":
                 if hasattr(role, 'confirm_extra_service'):
                     return role.confirm_extra_service("sex", role.sex_price_final)
+
+        # ========== UPDATE STATE DARI PESAN ==========
+        update_result = role.update_from_message(message)
+    
+        # Cek level up
+        if update_result.get('level_up'):
+            level_baru = update_result.get('new_level', role.relationship.level)
+            notif = f"✨ **Level naik ke {level_baru}/12!** ✨\n\n"
+        else:
+            notif = ""
+    
+        # Save conversation
+        role.add_conversation(message, "")
+    
+        # ========== GENERATE AI RESPONSE ==========
+        try:
+            # Dapatkan context dari memory jika ada
+            context = None
+            if self._memory_manager:
+                context = self._memory_manager.get_context_for_role(role_id)
+        
+            # Panggil AI
+            response = await role.generate_response(message, context)
+        
+            # Save response ke conversation
+            if role.conversations:
+                role.conversations[-1]['role'] = response[:200]
+        
+            return notif + response
+        
+        except Exception as e:
+            logger.error(f"Error generating response for {role_id}: {e}")
+            return notif + role.get_greeting()
         
         # ========== INTIMATE PHASE COMMANDS (untuk pelacur) ==========
         if hasattr(role, 'session_phase') and role.session_phase == "intimate_phase":
