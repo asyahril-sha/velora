@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
+from roles.base import BaseRole
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +200,7 @@ class ProfessionalRelationship:
 # SERVICE PROVIDER BASE
 # =============================================================================
 
-class ServiceProviderBase:
+class ServiceProviderBase(BaseRole):
     """
     Base class untuk semua provider jasa.
     Tidak punya emosi, fokus pada layanan profesional.
