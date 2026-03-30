@@ -278,6 +278,7 @@ class ServiceProviderBase:
         self.last_interaction: float = time.time()
 
         # ========== MEMORY MANAGER ==========
+        self.awareness_level = "limited"
         self._memory_manager = None
                      
         logger.info(f"💼 ServiceProvider {name} initialized | Price: {base_price} | Type: {service_type.value}")
