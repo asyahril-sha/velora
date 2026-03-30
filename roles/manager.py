@@ -136,13 +136,13 @@ class RoleManager:
         """
         if role_id not in self.roles:
             return f"Role '{role_id}' tidak ditemukan. Pilih dari: {', '.join(self.roles.keys())}"
-        
+    
         self.active_role = role_id
         if user_id:
             self.user_active_role[user_id] = role_id
-        
+    
         role = self.roles[role_id]
-        
+    
         # Reset status jika perlu (kecuali sedang dalam layanan)
         if hasattr(role, 'status'):
             if role.status.value in ['booked', 'active']:
@@ -155,23 +155,26 @@ Status: {role.status.value.upper()}
 Ketik **/status** untuk melihat detail layanan.
 Ketik **/batal** untuk membatalkan dan kembali ke Nova.
 """
-        
+    
         greeting = role.get_greeting()
         style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
         phase = role.relationship.phase if hasattr(role, 'relationship') else None
-        
+    
+        # Bersihkan greeting dari karakter Markdown yang bermasalah
+        greeting_clean = greeting.replace('*', '').replace('_', '').replace('`', '')
+    
         # Format respons berdasarkan tipe role
         if role.role_type in ['pijat_plus_plus', 'pelacur']:
             base_price = getattr(role, 'base_price', 0)
             min_price = getattr(role, 'min_price', 0)
             boob_size = getattr(role, 'boob_size', '-')
-            
+        
             return f"""
 💆‍♀️ **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
-*{role.hubungan_dengan_nova}*
+{role.hubungan_dengan_nova}
 
-{greeting}
+{greeting_clean}
 
 📊 **Harga:** Rp{base_price:,} (nego Rp{min_price:,})
 💋 **Body:** {boob_size} | Hijab: {'✅' if role.hijab else '❌'}
@@ -184,16 +187,16 @@ Ketik **/batal** untuk kembali ke Nova.
             return f"""
 💕 **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
-*{role.hubungan_dengan_nova}*
+{role.hubungan_dengan_nova}
 
-{greeting}
+{greeting_clean}
 
-📊 **Level:** {role.relationship.level}/12 | **Fase:** {phase.value.upper() if phase else '?'}
-🎭 **Style:** {style.value.upper() if style else '?'}
-💕 **Sayang:** {role.emotional.sayang:.0f}% | **Rindu:** {role.emotional.rindu:.0f}%
+📊 Level: {role.relationship.level}/12 | Fase: {role.relationship.phase.value.upper() if phase else '?'}
+🎭 Style: {style.value.upper() if style else '?'}
+💕 Sayang: {role.emotional.sayang:.0f}% | Rindu: {role.emotional.rindu:.0f}%
 
-Ketik **/batal** untuk kembali ke Nova.
-"""
+    Ketik **/batal** untuk kembali ke Nova.
+    """
     
     def get_active_role(self, user_id: int = None) -> Optional[str]:
         """Dapatkan role yang sedang aktif untuk user"""
