@@ -143,10 +143,11 @@ class RoleManager:
     
         role = self.roles[role_id]
     
-        # Reset status jika perlu (kecuali sedang dalam layanan)
-        if hasattr(role, 'status'):
-            if role.status.value in ['booked', 'active']:
-                return f"""
+        try:
+            # Reset status jika perlu (kecuali sedang dalam layanan)
+            if hasattr(role, 'status'):
+                if role.status.value in ['booked', 'active']:
+                    return f"""
 ⚠️ **{role.name} sedang dalam sesi layanan!**
 
 Status: {role.status.value.upper()}
@@ -155,21 +156,21 @@ Status: {role.status.value.upper()}
 Ketik **/status** untuk melihat detail layanan.
 Ketik **/batal** untuk membatalkan dan kembali ke Nova.
 """
-    
-        greeting = role.get_greeting()
-        style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
-        phase = role.relationship.phase if hasattr(role, 'relationship') else None
-    
-        # Bersihkan greeting dari karakter Markdown yang bermasalah
-        greeting_clean = greeting.replace('*', '').replace('_', '').replace('`', '')
-    
-        # Format respons berdasarkan tipe role
-        if role.role_type in ['pijat_plus_plus', 'pelacur']:
-            base_price = getattr(role, 'base_price', 0)
-            min_price = getattr(role, 'min_price', 0)
-            boob_size = getattr(role, 'boob_size', '-')
         
-            return f"""
+            greeting = role.get_greeting()
+            style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
+            phase = role.relationship.phase if hasattr(role, 'relationship') else None
+        
+            # Bersihkan greeting dari karakter Markdown yang bermasalah
+            greeting_clean = greeting.replace('*', '').replace('_', '').replace('`', '').replace('"', "'")
+        
+            # Format respons berdasarkan tipe role
+            if role.role_type in ['pijat_plus_plus', 'pelacur']:
+                base_price = getattr(role, 'base_price', 0)
+                min_price = getattr(role, 'min_price', 0)
+                boob_size = getattr(role, 'boob_size', '-')
+            
+                return f"""
 💆‍♀️ **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
 {role.hubungan_dengan_nova}
@@ -182,9 +183,9 @@ Ketik **/batal** untuk membatalkan dan kembali ke Nova.
 Ketik **/deal** untuk konfirmasi harga, atau **/nego [harga]** untuk nego.
 Ketik **/batal** untuk kembali ke Nova.
 """
-        else:
-            # Untuk main roles
-            return f"""
+            else:
+                # Untuk main roles
+                return f"""
 💕 **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
 {role.hubungan_dengan_nova}
@@ -195,8 +196,11 @@ Ketik **/batal** untuk kembali ke Nova.
 🎭 Style: {style.value.upper() if style else '?'}
 💕 Sayang: {role.emotional.sayang:.0f}% | Rindu: {role.emotional.rindu:.0f}%
 
-    Ketik **/batal** untuk kembali ke Nova.
-    """
+Ketik **/batal** untuk kembali ke Nova.
+"""
+        except Exception as e:
+            logger.error(f"Error in switch_role for {role_id}: {e}", exc_info=True)
+            return f"❌ Error: {str(e)}"
     
     def get_active_role(self, user_id: int = None) -> Optional[str]:
         """Dapatkan role yang sedang aktif untuk user"""
