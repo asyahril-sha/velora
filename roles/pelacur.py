@@ -97,7 +97,7 @@ class PelacurRole(ServiceProviderBase):
         # Service history
         self.service_history: List[Dict] = []
         
-        logger.info(f"💃 Pelacur {name} initialized | Boob: {boob_size} | Hijab: {hijab} | Price: {base_price}")
+        logger.info(f"💃 Pelacur {name} initialized | Boob: {boob_size} | Hijab: {hijab} | Price: {self.base_price}")
     
     # =========================================================================
     # SERVICE DESCRIPTION
