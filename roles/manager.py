@@ -545,6 +545,6 @@ def get_role_manager() -> RoleManager:
 
 __all__ = [
     'RoleManager',
-    'get_role_manager'
+    'get_role_manager',
     'reset_role_manager'
 ]
