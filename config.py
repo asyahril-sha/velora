@@ -1,14 +1,21 @@
 """
-VELORA - AI Drama Engine / Relationship Simulator
-Configuration Management with Railway Support
+VELORA - Configuration Management
+Semua konfigurasi dari environment variable dengan duk penuh Railway.
+- Database settings
+- AI settings (DeepSeek)
+- Webhook settings (Railway deployment)
+- Logging settings
+- Feature toggles
+- World settings
+- Validation
 """
 
 import os
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, ConfigDict
+from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +23,10 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # DATABASE SETTINGS
 # =============================================================================
+
 class DatabaseSettings(BaseSettings):
-    """Database configuration"""
-    model_config = SettingsConfigDict(env_prefix="DB_", extra="ignore")
+    """Konfigurasi database"""
+    model_config = ConfigDict(env_prefix="DB_", extra="ignore")
     
     type: str = Field("sqlite", alias="DB_TYPE")
     path: Path = Field(Path("data/velora.db"), alias="DB_PATH")
@@ -38,9 +46,10 @@ class DatabaseSettings(BaseSettings):
 # =============================================================================
 # AI SETTINGS
 # =============================================================================
+
 class AISettings(BaseSettings):
-    """DeepSeek AI configuration"""
-    model_config = SettingsConfigDict(env_prefix="AI_", extra="ignore")
+    """Konfigurasi AI DeepSeek"""
+    model_config = ConfigDict(env_prefix="AI_", extra="ignore")
     
     temperature: float = Field(0.85, alias="AI_TEMPERATURE")
     max_tokens: int = Field(1200, alias="AI_MAX_TOKENS")
@@ -58,9 +67,10 @@ class AISettings(BaseSettings):
 # =============================================================================
 # WEBHOOK SETTINGS (RAILWAY DEPLOYMENT)
 # =============================================================================
+
 class WebhookSettings(BaseSettings):
-    """Webhook configuration for Railway deployment"""
-    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+    """Konfigurasi webhook untuk Railway deployment"""
+    model_config = ConfigDict(env_prefix="", extra="ignore")
     
     port: int = Field(8080, alias="PORT")
     path: str = Field("/webhook", alias="WEBHOOK_PATH")
@@ -84,9 +94,10 @@ class WebhookSettings(BaseSettings):
 # =============================================================================
 # LOGGING SETTINGS
 # =============================================================================
+
 class LoggingSettings(BaseSettings):
-    """Logging configuration"""
-    model_config = SettingsConfigDict(env_prefix="LOG_", extra="ignore")
+    """Konfigurasi logging untuk Railway"""
+    model_config = ConfigDict(env_prefix="LOG_", extra="ignore")
     
     level: str = Field("INFO", alias="LOG_LEVEL")
     json_format: bool = Field(True, alias="LOG_JSON_FORMAT")
@@ -103,9 +114,10 @@ class LoggingSettings(BaseSettings):
 # =============================================================================
 # FEATURE SETTINGS
 # =============================================================================
+
 class FeatureSettings(BaseSettings):
-    """Feature toggles for VELORA"""
-    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+    """Feature toggles untuk VELORA"""
+    model_config = ConfigDict(env_prefix="", extra="ignore")
     
     vulgar_mode_enabled: bool = Field(True, alias="VULGAR_MODE_ENABLED")
     aftercare_enabled: bool = Field(True, alias="AFTERCARE_ENABLED")
@@ -117,9 +129,10 @@ class FeatureSettings(BaseSettings):
 # =============================================================================
 # WORLD SETTINGS
 # =============================================================================
+
 class WorldSettings(BaseSettings):
     """World system configuration"""
-    model_config = SettingsConfigDict(env_prefix="WORLD_", extra="ignore")
+    model_config = ConfigDict(env_prefix="WORLD_", extra="ignore")
     
     default_drama_level: int = Field(0, alias="DEFAULT_DRAMA_LEVEL")
     max_drama_level: int = Field(100, alias="MAX_DRAMA_LEVEL")
@@ -128,14 +141,42 @@ class WorldSettings(BaseSettings):
 
 
 # =============================================================================
+# REALITY ENGINE SETTINGS
+# =============================================================================
+
+class RealitySettings(BaseSettings):
+    """Reality engine configuration (realism 9.9)"""
+    model_config = ConfigDict(env_prefix="REALITY_", extra="ignore")
+    
+    emotion_delay_enabled: bool = Field(True, alias="EMOTION_DELAY_ENABLED")
+    memory_priority_enabled: bool = Field(True, alias="MEMORY_PRIORITY_ENABLED")
+    imperfection_enabled: bool = Field(True, alias="IMPERFECTION_ENABLED")
+    personality_drift_enabled: bool = Field(True, alias="PERSONALITY_DRIFT_ENABLED")
+    
+    # Delay settings
+    base_emotion_delay: int = Field(1, alias="BASE_EMOTION_DELAY")  # detik
+    max_emotion_delay: int = Field(5, alias="MAX_EMOTION_DELAY")  # detik
+    
+    # Memory priority
+    memory_importance_decay: float = Field(0.1, alias="MEMORY_IMPORTANCE_DECAY")  # per hari
+    
+    # Imperfection
+    imperfection_probability: float = Field(0.3, alias="IMPERFECTION_PROBABILITY")
+    
+    # Personality drift
+    personality_drift_rate: float = Field(0.5, alias="PERSONALITY_DRIFT_RATE")  # per 10 interaksi
+
+
+# =============================================================================
 # MAIN SETTINGS CLASS
 # =============================================================================
+
 class Settings(BaseSettings):
     """
     VELORA - AI Drama Engine / Relationship Simulator
     Main Settings with Railway Support
     """
-    model_config = SettingsConfigDict(
+    model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
@@ -154,6 +195,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     features: FeatureSettings = FeatureSettings()
     world: WorldSettings = WorldSettings()
+    reality: RealitySettings = RealitySettings()
     
     # ===== BASE DIRECTORY =====
     base_dir: Path = Path(__file__).parent
@@ -183,16 +225,18 @@ class Settings(BaseSettings):
         return v
     
     # ===== HELPER METHODS =====
-    def create_directories(self):
+    def create_directories(self) -> "Settings":
         """Create all necessary directories"""
         dirs = [
             Path("data"),
             Path("data/backups"),
             Path("data/memory"),
+            Path("logs"),
         ]
         for dir_path in dirs:
             try:
                 dir_path.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Directory created/verified: {dir_path}")
             except Exception as e:
                 logger.warning(f"Could not create directory {dir_path}: {e}")
         return self
@@ -206,36 +250,86 @@ class Settings(BaseSettings):
             'railway_mode': self.webhook.is_railway
         }
         
-        if not self.deepseek_api_key:
+        if not self.deepseek_api_key or self.deepseek_api_key == "your_deepseek_api_key_here":
             status['valid'] = False
-            status['errors'].append("DeepSeek API Key missing")
+            status['errors'].append("DeepSeek API Key missing or invalid")
         
-        if not self.telegram_token:
+        if not self.telegram_token or self.telegram_token == "your_telegram_bot_token_here":
             status['valid'] = False
-            status['errors'].append("Telegram Token missing")
+            status['errors'].append("Telegram Token missing or invalid")
         
         if self.admin_id == 0:
-            status['warnings'].append("Admin ID not set")
+            status['warnings'].append("Admin ID not set (default 0)")
+        
+        # Check database path is writable
+        try:
+            self.database.path.parent.mkdir(parents=True, exist_ok=True)
+            # Test write
+            test_file = self.database.path.parent / ".write_test"
+            test_file.touch()
+            test_file.unlink()
+        except Exception as e:
+            status['warnings'].append(f"Database directory may not be writable: {e}")
         
         return status
     
-    def log_configuration(self):
+    def log_configuration(self) -> None:
         """Log configuration to console"""
         logger.info("=" * 70)
         logger.info("💜 VELORA - Configuration Loaded")
         logger.info("=" * 70)
         logger.info(f"🗄️  Database: {self.database.type} @ {self.database.path}")
-        logger.info(f"🤖 AI Model: {self.ai.model} | Temperature: {self.ai.temperature}")
+        logger.info(f"🤖 AI Model: {self.ai.model} | Temperature: {self.ai.temperature} | Max Tokens: {self.ai.max_tokens}")
         logger.info(f"👑 Admin ID: {self.admin_id}")
         logger.info(f"🌍 Railway Mode: {self.webhook.is_railway}")
         if self.webhook.railway_domain:
             logger.info(f"🌐 Webhook URL: https://{self.webhook.railway_domain}{self.webhook.path}")
-        logger.info(f"🌍 World Drama Max: {self.world.max_drama_level} | Decay: {self.world.drama_decay_per_hour}/h")
+        logger.info(f"🌍 World: Drama Max: {self.world.max_drama_level} | Decay: {self.world.drama_decay_per_hour}/h")
+        logger.info(f"✨ Reality Engine: Delay={self.reality.emotion_delay_enabled} | Imperfection={self.reality.imperfection_enabled} | Drift={self.reality.personality_drift_enabled}")
         logger.info(f"💋 Vulgar Mode: {'ON' if self.features.vulgar_mode_enabled else 'OFF'}")
         logger.info(f"💕 Aftercare Mode: {'ON' if self.features.aftercare_enabled else 'OFF'}")
         logger.info(f"💬 Proactive Chat: {'ON' if self.features.proactive_chat_enabled else 'OFF'}")
         logger.info(f"💾 Auto Backup: {'ON' if self.features.auto_backup_enabled else 'OFF'}")
         logger.info("=" * 70)
+    
+    def get_status_text(self) -> str:
+        """Get status text for display"""
+        status = self.validate_all()
+        
+        lines = [
+            "╔══════════════════════════════════════════════════════════════╗",
+            "║                    ⚙️ VELORA CONFIGURATION                   ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            f"║ Valid: {'✅' if status['valid'] else '❌'}                                        ║",
+            f"║ Railway Mode: {'✅' if status['railway_mode'] else '❌'}                                    ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            f"║ Admin ID: {self.admin_id}                                             ║",
+            f"║ AI Model: {self.ai.model}                                         ║",
+            f"║ Database: {self.database.path}                               ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            "║ FEATURES:                                                  ║",
+            f"║   Vulgar Mode: {'✅' if self.features.vulgar_mode_enabled else '❌'}                                            ║",
+            f"║   Proactive Chat: {'✅' if self.features.proactive_chat_enabled else '❌'}                                        ║",
+            f"║   Auto Backup: {'✅' if self.features.auto_backup_enabled else '❌'}                                          ║",
+            "╠══════════════════════════════════════════════════════════════╣",
+            "║ REALITY ENGINE:                                            ║",
+            f"║   Emotion Delay: {'✅' if self.reality.emotion_delay_enabled else '❌'}                                    ║",
+            f"║   Imperfection: {'✅' if self.reality.imperfection_enabled else '❌'}                                     ║",
+            f"║   Personality Drift: {'✅' if self.reality.personality_drift_enabled else '❌'}                               ║",
+            "╚══════════════════════════════════════════════════════════════╝"
+        ]
+        
+        if status['errors']:
+            lines.append("\n❌ ERRORS:")
+            for err in status['errors']:
+                lines.append(f"   • {err}")
+        
+        if status['warnings']:
+            lines.append("\n⚠️ WARNINGS:")
+            for warn in status['warnings']:
+                lines.append(f"   • {warn}")
+        
+        return "\n".join(lines)
 
 
 # =============================================================================
@@ -270,7 +364,26 @@ def get_settings() -> Settings:
     return _settings
 
 
+def reset_settings() -> None:
+    """Reset settings instance (for testing)"""
+    global _settings
+    _settings = None
+    logger.info("🔄 Settings reset")
+
+
 settings = get_settings()
 
 
-__all__ = ['settings', 'get_settings', 'Settings']
+__all__ = [
+    'DatabaseSettings',
+    'AISettings',
+    'WebhookSettings',
+    'LoggingSettings',
+    'FeatureSettings',
+    'WorldSettings',
+    'RealitySettings',
+    'Settings',
+    'get_settings',
+    'reset_settings',
+    'settings'
+]
