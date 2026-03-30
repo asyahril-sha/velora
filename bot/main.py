@@ -4,17 +4,21 @@ Telegram bot + aiohttp web server (Railway webhook support)
 - Bot initialization with all handlers
 - Webhook setup for Railway deployment
 - Background worker integration
-- Graceful shutdown
+- Graceful shutdown with signal handling
+- Health check endpoint
+- Database connection management
 """
 
 import os
 import sys
-import asyncio
 import signal
+import asyncio
 import logging
+import json
+import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from aiohttp import web
 from telegram import Update
@@ -22,14 +26,14 @@ from telegram.ext import Application, ApplicationBuilder, MessageHandler, filter
 from telegram.request import HTTPXRequest
 
 from config import get_settings
-from bot.handlers import register_handlers
-from bot.messages import message_handler, error_handler
-from core.orchestrator import get_orchestrator
-from core.memory import get_memory_manager
-from core.world import get_world_state
-from memory.persistent import get_persistent
-from roles.manager import get_role_manager
-from worker.background import get_worker
+from bot.handlers import register_handlers, set_user_mode, clear_user_mode
+from bot.messages import message_handler, voice_handler, sticker_handler, photo_handler, document_handler, error_handler
+from core.orchestrator import get_orchestrator, reset_orchestrator
+from core.memory import get_memory_manager, reset_memory_manager
+from core.world import get_world_state, reset_world_state
+from memory.persistent import get_persistent, reset_persistent
+from roles.manager import get_role_manager, reset_role_manager
+from worker.background import get_worker, reset_worker
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 _application: Optional[Application] = None
 _shutdown_flag = False
+_start_time = datetime.now()
 
 
 # =============================================================================
@@ -63,6 +68,7 @@ async def webhook_handler(request: web.Request):
     if secret:
         header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
         if header_secret != secret:
+            logger.warning(f"Invalid webhook secret token")
             return web.Response(status=401, text="Invalid secret token")
     
     try:
@@ -79,22 +85,44 @@ async def health_handler(request: web.Request):
     """Health check endpoint for Railway"""
     settings = get_settings()
     worker = get_worker()
+    uptime = (datetime.now() - _start_time).total_seconds()
+    
+    # Check database
+    db_ok = False
+    try:
+        persistent = await get_persistent()
+        await persistent.get_stats()
+        db_ok = True
+    except Exception as e:
+        logger.error(f"Health check DB error: {e}")
     
     return web.json_response({
-        "status": "healthy",
+        "status": "healthy" if db_ok and worker.is_running else "degraded",
         "bot": "VELORA",
         "version": "1.0.0",
+        "uptime_seconds": uptime,
         "worker_running": worker.is_running,
+        "database_ok": db_ok,
+        "railway_mode": settings.webhook.is_railway,
         "timestamp": datetime.now().isoformat()
     })
 
 
 async def root_handler(request: web.Request):
     """Root endpoint"""
+    settings = get_settings()
+    uptime = int((datetime.now() - _start_time).total_seconds())
+    hours = uptime // 3600
+    minutes = (uptime % 3600) // 60
+    seconds = uptime % 60
+    
     return web.json_response({
         "name": "VELORA",
+        "version": "1.0.0",
         "status": "running",
-        "message": "AI Drama Engine / Relationship Simulator"
+        "uptime": f"{hours}h {minutes}m {seconds}s",
+        "message": "AI Drama Engine / Relationship Simulator",
+        "railway_mode": settings.webhook.is_railway
     })
 
 
@@ -113,6 +141,7 @@ class VeloraBot:
         self._runner: Optional[web.AppRunner] = None
         self._save_task: Optional[asyncio.Task] = None
         self._worker_task: Optional[asyncio.Task] = None
+        self._shutdown_flag = False
         
         logger.info("💜 VeloraBot initialized")
     
@@ -150,6 +179,11 @@ class VeloraBot:
             
             # Initialize worker
             worker = get_worker()
+            
+            # Set up user IDs from settings
+            settings = get_settings()
+            if settings.admin_id:
+                worker.add_user(settings.admin_id)
             logger.info("✅ Worker initialized")
             
             logger.info("🎉 All VELORA systems initialized successfully")
@@ -172,7 +206,6 @@ class VeloraBot:
             # Load memory
             memory_data = await persistent.get_state("memory_manager")
             if memory_data:
-                import json
                 memory.from_dict(json.loads(memory_data), None, world)
             
             logger.info("📀 All states loaded from database")
@@ -215,7 +248,8 @@ class VeloraBot:
         request = HTTPXRequest(
             connection_pool_size=50,
             connect_timeout=60,
-            read_timeout=60
+            read_timeout=60,
+            write_timeout=60
         )
         
         app = ApplicationBuilder() \
@@ -226,8 +260,12 @@ class VeloraBot:
         # Register all command handlers
         register_handlers(app)
         
-        # Register message handler (for non-command messages)
+        # Register message handlers (in order of priority)
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+        app.add_handler(MessageHandler(filters.VOICE, voice_handler))
+        app.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
+        app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+        app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
         
         # Register error handler
         app.add_error_handler(error_handler)
@@ -291,7 +329,7 @@ class VeloraBot:
     
     async def _save_loop(self):
         """Periodic save loop"""
-        while not _shutdown_flag:
+        while not self._shutdown_flag:
             await asyncio.sleep(60)  # Save every minute
             await self._save_all_states()
     
@@ -304,11 +342,23 @@ class VeloraBot:
         if settings.admin_id:
             worker.add_user(settings.admin_id)
         
+        # Set references
+        worker.initialize(
+            application=self.application,
+            user_ids=[settings.admin_id] if settings.admin_id else [],
+            get_orchestrator=get_orchestrator,
+            get_persistent=get_persistent,
+            get_emotional_engine=None,  # Will be imported when needed
+            get_relationship_manager=None,
+            get_conflict_engine=None,
+            get_brain=None
+        )
+        
         # Start worker
         await worker.start()
         
         # Keep running
-        while not _shutdown_flag:
+        while not self._shutdown_flag:
             await asyncio.sleep(1)
         
         # Stop worker on shutdown
@@ -364,15 +414,13 @@ class VeloraBot:
         logger.info("=" * 70)
         
         # Keep running
-        while not _shutdown_flag:
+        while not self._shutdown_flag:
             await asyncio.sleep(1)
     
     async def shutdown(self):
         """Graceful shutdown"""
-        global _shutdown_flag
-        
         logger.info("🛑 Shutting down VELORA...")
-        _shutdown_flag = True
+        self._shutdown_flag = True
         
         # Cancel background tasks
         for task in [self._save_task, self._worker_task]:
@@ -413,14 +461,11 @@ class VeloraBot:
 
 
 # =============================================================================
-# ENTRY POINT
+# SIGNAL HANDLERS
 # =============================================================================
 
-async def main():
-    """Main entry point"""
-    bot = VeloraBot()
-    
-    # Setup signal handlers
+def setup_signal_handlers(bot: VeloraBot):
+    """Setup signal handlers for graceful shutdown"""
     loop = asyncio.get_running_loop()
     
     def signal_handler():
@@ -431,7 +476,23 @@ async def main():
             loop.add_signal_handler(sig, signal_handler)
         except NotImplementedError:
             # Windows doesn't support add_signal_handler
+            logger.warning(f"Signal handler not supported for {sig} on this platform")
             pass
+
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+async def main():
+    """Main entry point"""
+    bot = VeloraBot()
+    
+    # Setup signal handlers (if supported)
+    try:
+        setup_signal_handlers(bot)
+    except Exception as e:
+        logger.warning(f"Could not setup signal handlers: {e}")
     
     try:
         await bot.start()
@@ -441,6 +502,10 @@ async def main():
         logger.error(f"Main error: {e}", exc_info=True)
         raise
 
+
+# =============================================================================
+# RUN
+# =============================================================================
 
 if __name__ == "__main__":
     try:
