@@ -71,8 +71,6 @@ class PelacurRole(ServiceProviderBase):
         
         # ========== PELACUR SPECIFIC ==========
         self.boob_size = boob_size
-        self.personality = personality
-        self.voice_style = voice_style
         
         # Booking duration
         self.booking_duration_hours = 6
