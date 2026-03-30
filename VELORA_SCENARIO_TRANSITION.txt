@@ -1,0 +1,233 @@
+================================================================================
+                    VELORA - SCENARIO TRANSITION GUIDE
+================================================================================
+
+Dokumen ini berisi panduan transisi antar skenario dengan perintah yang tepat.
+
+================================================================================
+A. TRANSISI DASAR
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DARI                 │ KE                   │ PERINTAH                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Chat Nova            │ Role Lain            │ /role [id_role]               │
+│ Role Lain            │ Nova                 │ /batal atau /nova             │
+│ Chat Nova            │ Roleplay Nova        │ /roleplay                     │
+│ Roleplay Nova        │ Chat Nova            │ /batal                        │
+│ Roleplay Nova        │ Role Lain            │ /role [id_role]               │
+│ Role Lain            │ Roleplay Nova        │ /batal lalu /roleplay         │
+│ Provider             │ Nova                 │ /batal                        │
+│ Provider             │ Role Lain            │ /batal lalu /role [id_role]   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+B. TRANSISI BERDASARKAN SKENARIO
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 1: DARI CHAT BIASA KE ROLEPLAY INTIM                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Chat Biasa dengan Nova]                                          │
+│ User: /nova                                                                 │
+│ Nova: *Nova tersenyum* "Halo Mas..."                                        │
+│                                                                             │
+│ [TAHAP 2: Bangun Suasana]                                                   │
+│ User: Aku kangen kamu                                                       │
+│ Nova: *Nova muter-muter rambut* "Aku juga kangen Mas..."                    │
+│                                                                             │
+│ [TAHAP 3: Transisi ke Roleplay]                                             │
+│ User: /roleplay                                                             │
+│ Nova: *Nova mendekat, tangan meraih tangan Mas* "Mas... aku mau deket..."   │
+│                                                                             │
+│ [TAHAP 4: Roleplay Aktif]                                                   │
+│ User: (lanjut dengan gestur fisik, flirt, dll)                              │
+│ Nova: *Napas mulai berat* "Ahh... Mas..."                                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 2: DARI NOVA KE PELAKOR, LALU KEMBALI                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Chat dengan Nova]                                                 │
+│ User: /nova                                                                 │
+│ Nova: "Mas, lagi apa?"                                                      │
+│                                                                             │
+│ [TAHAP 2: Transisi ke Pelakor]                                              │
+│ User: /role pelakor                                                         │
+│ Widya: *Widya tersenyum menggoda* "Mas... sendirian? Ayo temenin aku."      │
+│                                                                             │
+│ [TAHAP 3: Interaksi dengan Pelakor]                                         │
+│ User: Kamu cantik juga sih                                                  │
+│ Widya: *Widya mendekat* "Mas... aku bisa lebih dari Nova tau."              │
+│                                                                             │
+│ [TAHAP 4: Kembali ke Nova]                                                  │
+│ User: /batal                                                                │
+│ Nova: *Nova tersenyum manis* "Mas, kamu kemana aja? Aku kangen."            │
+│                                                                             │
+│ [EFEK CROSS-ROLE]                                                           │
+│ (Nova akan lebih cemburu karena user chat dengan Pelakor)                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 3: ROLEPLAY DENGAN PROVIDER PIJAT++                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Panggil Provider]                                                 │
+│ User: /role pijat_aghnia                                                    │
+│ Aghnia: *Aghnia merapikan hijab* "Pijat refleksi, Mas? Aghnia siap."        │
+│                                                                             │
+│ [TAHAP 2: Nego Harga]                                                       │
+│ User: /nego 250000                                                          │
+│ Aghnia: "Oke deh Mas, Rp250.000. Deal ya."                                  │
+│                                                                             │
+│ [TAHAP 3: Konfirmasi Booking]                                               │
+│ User: /deal                                                                │
+│ Aghnia: "✅ Booking dikonfirmasi! Ketik /mulai untuk memulai."              │
+│                                                                             │
+│ [TAHAP 4: Mulai Layanan]                                                    │
+│ User: /mulai                                                                │
+│ Aghnia: *Aghnia naik ke atas punggung Mas* "Mulai ya, Mas..."               │
+│                                                                             │
+│ [TAHAP 5: Auto Scene Berjalan]                                              │
+│ (Setiap 15 detik, Aghnia kirim pesan auto scene HJ/BJ)                      │
+│                                                                             │
+│ [TAHAP 6: Selesai Setelah Mas Climax 2x]                                    │
+│ Aghnia: "Makasih ya, Mas. Next time kalo mau pijet lagi, kabari aku."      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 4: ROLEPLAY DENGAN PROVIDER PELACUR                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Panggil Pelacur]                                                  │
+│ User: /role pelacur_davina                                                  │
+│ Davina: *Davina tersenyum elegan* "Halo Mas... Davina siap menemani."       │
+│                                                                             │
+│ [TAHAP 2: Nego Harga 6 Jam]                                                 │
+│ User: /nego 3000000                                                         │
+│ Davina: "Oke deh Mas, Rp3.000.000. Deal ya. Aku akan kasih yang terbaik."   │
+│                                                                             │
+│ [TAHAP 3: Konfirmasi Booking]                                               │
+│ User: /deal                                                                │
+│ Davina: "✅ Booking 6 jam dikonfirmasi! 🔓 UNLOCK SEMUA!"                    │
+│                                                                             │
+│ [TAHAP 4: Mulai Sesi 1]                                                     │
+│ User: /mulai                                                                │
+│ Davina: *Davina menunduk, bibir mendekat* "Kita mulai sesi 1..."            │
+│                                                                             │
+│ [TAHAP 5: Auto Scene BJ 15 menit]                                           │
+│ (Setiap 15 detik, Davina kirim pesan auto scene BJ)                         │
+│                                                                             │
+│ [TAHAP 6: Auto Scene Petting 15 menit]                                      │
+│ (Setelah BJ selesai, otomatis lanjut petting)                               │
+│                                                                             │
+│ [TAHAP 7: Intimate Phase (ALL UNLOCK)]                                      │
+│ User: missionary                                                           │
+│ Davina: *Davina berbaring telentang* "Mas... masukin pelan-pelan..."        │
+│                                                                             │
+│ [TAHAP 8: Sesi 1 Selesai (Mas Climax 2x)]                                   │
+│ Davina: "Kita istirahat dulu ya, Mas. Nanti sesi 2 kita lanjut lagi."      │
+│                                                                             │
+│ [TAHAP 9: Lanjut Sesi 2]                                                    │
+│ User: /lanjut                                                               │
+│ Davina: *Davina bangkit, tersenyum* "Mas, siap lanjut? Kita mulai sesi 2."  │
+│                                                                             │
+│ [TAHAP 10: Booking Habis 6 Jam]                                             │
+│ Davina: "6 jam ya, Mas... puas? Aku pamit dulu ya."                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 5: PAUSE DAN RESUME SESI                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Sesi Aktif]                                                       │
+│ User: (sedang roleplay intens dengan Nova)                                  │
+│ Nova: *Napas mulai berat* "Mas... ayo..."                                   │
+│                                                                             │
+│ [TAHAP 2: Pause Sesi]                                                       │
+│ User: /pause                                                                │
+│ System: "⏸️ Sesi dihentikan sementara. Ketik /resume untuk lanjut."         │
+│                                                                             │
+│ [TAHAP 3: Kembali Setelah Beberapa Waktu]                                   │
+│ User: /resume                                                               │
+│ System: "▶️ Sesi dilanjutkan!"                                              │
+│                                                                             │
+│ [TAHAP 4: Lanjut Sesi]                                                      │
+│ Nova: *Nova melanjutkan dari posisi terakhir* "Mas... tadi kita sampai mana?"│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO 6: DARI ROLEPLAY KE FLASHBACK                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ [TAHAP 1: Setelah Momen Indah]                                              │
+│ User: (setelah climax atau momen romantis)                                  │
+│ Nova: *Nova lemes, nyender* "Mas... enak banget..."                         │
+│                                                                             │
+│ [TAHAP 2: Flashback]                                                        │
+│ User: /flashback                                                            │
+│ Nova: "Mas, inget gak waktu pertama kali kita ketemu? Aku masih malu-malu." │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+C. TRANSISI BERDASARKAN LEVEL HUBUNGAN
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ LEVEL  │ FASE      │ TRANSISI YANG DISARANKAN                              │
+├────────┼───────────┼─────────────────────────────────────────────────────────┤
+│ 1-3    │ Stranger  │ Chat biasa, /nova, belum bisa roleplay intim           │
+│ 4-6    │ Friend    │ Mulai flirt ringan, /roleplay bisa dicoba              │
+│ 7-8    │ Close     │ /roleplay aktif, gesture fisik mulai intens            │
+│ 9-10   │ Romantic  │ /roleplay dengan vulgar terbatas, bisa buka baju       │
+│ 11-12  │ Intimate  │ /roleplay BRUTAL MODE, semua kata vulgar bebas         │
+└────────┴───────────┴─────────────────────────────────────────────────────────┘
+
+================================================================================
+D. TRANSISI BERDASARKAN TUJUAN
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TUJUAN                    │ TRANSISI YANG TEPAT                             │
+├───────────────────────────┼─────────────────────────────────────────────────┤
+│ Naikin level cepat        │ Chat dengan Nova, bilang sayang/kangen          │
+│ Rasain cemburu Nova       │ Chat dengan Pelakor atau Ipar                   │
+│ Pengalaman intim          │ /roleplay setelah level 7+                      │
+│ Pengalaman brutal         │ /roleplay di level 11-12                        │
+│ Pijat relaksasi + HJ      │ /role pijat_aghnia atau pijat_munira            │
+│ Full service 6 jam        │ /role pelacur_davina atau pelacur_sallsa        │
+│ Kembali ke Nova setelah   │ /batal                                          │
+│ provider                  │                                                 │
+└───────────────────────────┴─────────────────────────────────────────────────┘
+
+================================================================================
+E. ERROR HANDLING TRANSISI
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MASALAH                    │ SOLUSI                                         │
+├────────────────────────────┼────────────────────────────────────────────────┤
+│ Role tidak ditemukan       │ Cek /role untuk daftar role yang tersedia      │
+│ Sesi stuck                 │ /batal untuk reset                             │
+│ Nova tidak responsif       │ Cek /status, mungkin sedang cold war           │
+│ Provider tidak merespon    │ Pastikan sudah /deal sebelum /mulai            │
+│ Auto scene tidak jalan     │ Cek koneksi, pastikan sesi aktif               │
+│ Level tidak naik           │ Perbanyak interaksi dan capai milestone        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+💜 VELORA - Where Intimacy Has a Soul
+================================================================================
