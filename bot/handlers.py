@@ -477,21 +477,24 @@ async def pause_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from memory.persistent import get_persistent
     persistent = await get_persistent()
     
-    # Save all states
+    # Save all states - HAPUS import core.brain
     from core.emotional import get_emotional_engine
     from core.relationship import get_relationship_manager
     from core.conflict import get_conflict_engine
-    from core.brain import get_anora_brain
+    from core.memory import get_memory_manager  # <--- GANTI core.brain dengan core.memory
+    from core.world import get_world_state
     
     emo = get_emotional_engine()
     rel = get_relationship_manager()
     conflict = get_conflict_engine()
-    brain = get_anora_brain()
+    memory = get_memory_manager()  # <--- GANTI brain dengan memory
+    world = get_world_state()
     
     await persistent.save_emotional_state(emo)
     await persistent.save_relationship_state(rel)
     await persistent.save_conflict_state(conflict)
-    await persistent.save_current_state(brain)
+    await persistent.save_world_state(world)  # <--- TAMBAHKAN SAVE WORLD
+    await persistent.save_memory_state(memory)  # <--- TAMBAHKAN SAVE MEMORY (jika ada method ini)
     
     await update.message.reply_text(
         "⏸️ **Sesi Dihentikan Sementara**\n\n"
