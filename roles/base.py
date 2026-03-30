@@ -87,6 +87,8 @@ class BaseRole:
         
         # ========== STATUS ==========
         self.is_active: bool = False
+
+        self.awareness_level = AwarenessLevel.LIMITED
         
         logger.info(f"👤 Role {self.name} ({self.nickname}) initialized | Awareness: {awareness_level.value}")
     
