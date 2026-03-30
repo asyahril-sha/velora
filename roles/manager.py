@@ -71,13 +71,19 @@ class RoleManager:
         """Initialize semua role dengan memory manager dan world"""
         self._memory_manager = memory_manager
         self._world = world
-        
+    
         for role_id, role in self.roles.items():
             role.initialize(memory_manager)
-            # Register ke world
+            # Register ke world - pastikan awareness_level adalah enum
             if world:
-                world.register_role(role_id, role.awareness_level)
-        
+                from core.world import AwarenessLevel
+                # Jika role.awareness_level masih string, konversi ke enum
+                if isinstance(role.awareness_level, str):
+                    awareness_enum = AwarenessLevel(role.awareness_level.lower())
+                else:
+                    awareness_enum = role.awareness_level
+                world.register_role(role_id, awareness_enum)
+    
         logger.info(f"🔗 All {len(self.roles)} roles connected to MemoryManager and World")
     
     # =========================================================================
