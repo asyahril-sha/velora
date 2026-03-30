@@ -59,13 +59,13 @@ class PijatPlusPlusRole(ServiceProviderBase):
             appearance=appearance,
             service_type=ServiceType.PIJAT_PLUS_PLUS,
             base_price=500000,  # BJ
-            min_price=200000
+            min_price=200000, 
+            self.personality = personality,
+            self.voice_style = voice_style
         )
         
         # ========== PIJAT++ SPECIFIC ==========
         self.boob_size = boob_size
-        self.voice_style = voice_style
-        self.personality = personality
         self.pijat_style = pijat_style
         
         # Service progress
