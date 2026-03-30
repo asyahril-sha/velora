@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
+from core.world import AwarenessLevel
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,7 @@ class ServiceProviderBase:
         self.last_interaction: float = time.time()
 
         # ========== MEMORY MANAGER ==========
-        self.awareness_level = "limited"
+        self.awareness_level = AwarenessLevel.LIMITED
         self._memory_manager = None
                      
         logger.info(f"💼 ServiceProvider {name} initialized | Price: {base_price} | Type: {service_type.value}")
