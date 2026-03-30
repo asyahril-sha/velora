@@ -702,26 +702,32 @@ class PersonalityDriftSystem:
         """Dapatkan deskripsi personality saat ini"""
         descriptions = []
     
-        for trait in self.traits.values():
-            # Pastikan trait.value adalah angka
-            value = trait.value if hasattr(trait, 'value') else trait
-            if isinstance(value, (int, float)):
-                if value > 70:
-                    descriptions.append(f"{trait.name} tinggi")
-                elif value < 30:
-                    descriptions.append(f"{trait.name} rendah")
-            elif isinstance(value, str):
-                # Jika string, coba konversi ke angka
-                try:
-                    num_value = float(value)
-                    if num_value > 70:
-                        descriptions.append(f"{trait.name} tinggi")
-                    elif num_value < 30:
-                        descriptions.append(f"{trait.name} rendah")
-                except ValueError:
-                    pass
+        for trait_name, trait in self.traits.items():
+            try:
+                # Ambil nilai dengan aman
+                if isinstance(trait, dict):
+                    value = trait.get('value', 0)
+                elif hasattr(trait, 'value'):
+                    value = trait.value
+                else:
+                    value = trait
+                
+                # Konversi ke float jika perlu
+                if isinstance(value, str):
+                    value = float(value)
+                
+                if isinstance(value, (int, float)):
+                    if value > 70:
+                        descriptions.append(f"{trait_name} tinggi")
+                    elif value < 30:
+                        descriptions.append(f"{trait_name} rendah")
+            except (ValueError, TypeError, AttributeError):
+                # Skip jika error
+                continue
     
-        return ", ".join(descriptions) if descriptions else "stabil"
+        if descriptions:
+            return ", ".join(descriptions)
+        return "stabil"
 
 
 # =============================================================================
