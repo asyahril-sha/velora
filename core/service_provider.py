@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from roles.base import BaseRole
 
 logger = logging.getLogger(__name__)
 
