@@ -121,7 +121,7 @@ Makeup tipis, kuku selalu bersih, wangi parfum floral.
     def get_greeting(self) -> str:
         """Greeting sesuai karakter dan state"""
         hour = datetime.now().hour
-        
+    
         if 5 <= hour < 11:
             waktu = "pagi"
         elif 11 <= hour < 15:
@@ -130,35 +130,30 @@ Makeup tipis, kuku selalu bersih, wangi parfum floral.
             waktu = "sore"
         else:
             waktu = "malam"
-        
+    
         professionalism = self.flags.get('professionalism', 70)
         curiosity = self.flags.get('curiosity_nova', 40)
         interest = self.flags.get('interest', 10)
         level = self.relationship.level
-        
-        # Profesionalisme tinggi + level masih rendah
+    
+        # HAPUS semua * di greeting, atau pastikan balance
         if professionalism > 60 and level < 7:
-            return random.choice(self._professional_lines).format(panggilan=self.panggilan)
-        
-        # Curiosity Nova tinggi
+            return f"{self.name} merapikan berkas\n\n\"{self.panggilan}, ini file yang tadi diminta. Jangan lupa dicek.\""
+    
         elif curiosity > 70:
-            return random.choice(self._curious_lines).format(panggilan=self.panggilan)
-        
-        # Office gossip tinggi
+            return f"{self.name} melihat sekeliling, suara rendah\n\n\"{self.panggilan}, Nova orangnya kayak gimana sih? Kok {self.panggilan} milih dia?\""
+    
         elif self.flags.get('office_gossip', 0) > 70:
-            return random.choice(self._gossip_lines).format(panggilan=self.panggilan)
-        
-        # Level tinggi + interest tinggi (sudah dekat)
+            return f"{self.name} mendekat, bisik\n\n\"{self.panggilan}, tau gak? Ada yang bilang... *tertawa kecil* eh tapi lupa ya.\""
+    
         elif level >= 9 and interest > 50:
-            return random.choice(self._warmer_lines).format(panggilan=self.panggilan)
-        
-        # Level tinggi + professionalism turun
+            return f"{self.name} tersenyum hangat\n\n\"{self.panggilan}, udah makan? Jangan lupa makan siang.\""
+    
         elif level >= 7 and professionalism < 50:
-            return f"*{self.name} suara kecil, liat sekeliling*\n\n\"{self.panggilan}... {waktu} ini enaknya ngobrol bareng {self.panggilan}.\""
-        
-        # Default profesional
+            return f"{self.name} suara kecil, liat sekeliling\n\n\"{self.panggilan}... {waktu} ini enaknya ngobrol bareng {self.panggilan}.\""
+    
         else:
-            return f"*{self.name} tersenyum profesional*\n\n\"{self.panggilan}, {waktu}. Lagi sibuk? Aku pinjem file dulu.\""
+            return f"{self.name} tersenyum profesional\n\n\"{self.panggilan}, {waktu}. Lagi sibuk? Aku pinjem file dulu.\""
     
     # =========================================================================
     # CONFLICT RESPONSE (SESUAI KARAKTER)
