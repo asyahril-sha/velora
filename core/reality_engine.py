@@ -701,13 +701,26 @@ class PersonalityDriftSystem:
     def get_description(self) -> str:
         """Dapatkan deskripsi personality saat ini"""
         descriptions = []
-        
+    
         for trait in self.traits.values():
-            if trait.value > 70:
-                descriptions.append(f"{trait.name} tinggi")
-            elif trait.value < 30:
-                descriptions.append(f"{trait.name} rendah")
-        
+            # Pastikan trait.value adalah angka
+            value = trait.value if hasattr(trait, 'value') else trait
+            if isinstance(value, (int, float)):
+                if value > 70:
+                    descriptions.append(f"{trait.name} tinggi")
+                elif value < 30:
+                    descriptions.append(f"{trait.name} rendah")
+            elif isinstance(value, str):
+                # Jika string, coba konversi ke angka
+                try:
+                    num_value = float(value)
+                    if num_value > 70:
+                        descriptions.append(f"{trait.name} tinggi")
+                    elif num_value < 30:
+                        descriptions.append(f"{trait.name} rendah")
+                except ValueError:
+                    pass
+    
         return ", ".join(descriptions) if descriptions else "stabil"
 
 
