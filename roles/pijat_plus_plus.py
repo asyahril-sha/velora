@@ -60,8 +60,8 @@ class PijatPlusPlusRole(ServiceProviderBase):
             service_type=ServiceType.PIJAT_PLUS_PLUS,
             base_price=500000,  # BJ
             min_price=200000, 
-            self.personality = personality,
-            self.voice_style = voice_style
+            personality=personality,
+            voice_style=voice_style
         )
         
         # ========== PIJAT++ SPECIFIC ==========
