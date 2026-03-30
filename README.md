@@ -10,7 +10,7 @@
 - Sayang, Rindu, Trust, Mood, Desire, Arousal, Tension, Cemburu, Kecewa
 
 ### 🎭 5 Gaya Bicara
-- Cold, Clingy, Warm, Flirty, Neutral
+- Cold (dingin), Clingy (manja), Warm (hangat), Flirty (menggoda), Neutral (normal)
 
 ### 💕 5 Fase Hubungan
 - Stranger (1-3) → Friend (4-6) → Close (7-8) → Romantic (9-10) → Intimate (11-12)
@@ -21,17 +21,78 @@
 ### 🌍 World System
 - Global relationship status, drama level, cross-role effects
 
-### 👤 Role System
-- Nova, Ipar (Dietha), Teman Kantor (Ipeh), Pelakor (Wid), Istri Orang (Sika)
+### 👤 Role System (9 Role)
+| Role | Nama | Hijab | Deskripsi |
+|------|------|-------|-----------|
+| Nova | Nova | ✅ | Kekasih utama |
+| Ipar | Tasya Dietha | ❌ | Adik ipar yang seksi |
+| Teman Kantor | Musdalifah | ✅ | Teman kantor profesional |
+| Pelakor | Widya | ✅ | Pengen rebut Mas |
+| Istri Orang | Siska | ✅ | Istri yang butuh perhatian |
+| Pijat++ | Aghnia Punjabi | ✅ | Pijat refleksi + extra service |
+| Pijat++ | Munira Agile | ✅ | Pijat refleksi + extra service |
+| Pelacur | Davina Karamoy | ✅ | Full service 6 jam |
+| Pelacur | Sallsa Binta | ❌ | Full service 6 jam |
+
+### 🔥 Intimacy System
+- Stamina realistis (recovery, climax cost)
+- Arousal & Desire system
+- 6 posisi intim (missionary, cowgirl, doggy, spooning, standing, sitting)
+- Auto scene untuk provider (HJ, BJ, petting)
+- **Brutal mode di level 11-12** - semua kata vulgar bebas
+
+### 💾 Memory System
+- Short-term memory (50 kejadian terakhir)
+- Long-term memory (kebiasaan, momen penting, janji)
+- Global timeline
+- Role-specific knowledge (awareness system)
+
+### 🔄 Background Worker
+- Rindu growth (30 menit)
+- Conflict decay (30 menit)
+- Mood recovery (1 jam)
+- Auto save (1 menit)
+- Proactive chat (5 menit)
+- Auto scene untuk provider (15 detik)
+- Auto backup (6 jam)
 
 ---
 
-## 🚀 Quick Start
+## 📋 Command List
 
-### Installation
-```bash
-git clone <repo>
-cd velora
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your credentials
+### Mode Chat
+| Command | Deskripsi |
+|---------|-----------|
+| `/start` | Memulai bot |
+| `/nova` | Memanggil Nova |
+| `/status` | Status lengkap VELORA |
+| `/flashback` | Flashback ke momen indah |
+
+### Mode Roleplay
+| Command | Deskripsi |
+|---------|-----------|
+| `/roleplay` | Mengaktifkan mode roleplay dengan Nova |
+| `/role` | Melihat daftar role |
+| `/role <id>` | Switch ke role tertentu |
+| `/statusrole` | Status role aktif |
+| `/batal` | Kembali ke Nova |
+
+### Lokasi
+| Command | Deskripsi |
+|---------|-----------|
+| `/pindah <tempat>` | Pindah ke lokasi tertentu |
+
+### Manajemen Sesi
+| Command | Deskripsi |
+|---------|-----------|
+| `/pause` | Hentikan sesi sementara |
+| `/resume` | Lanjutkan sesi |
+
+### System
+| Command | Deskripsi |
+|---------|-----------|
+| `/backup` | Backup database |
+| `/stats` | Statistik sistem |
+| `/help` | Bantuan |
+
+---
