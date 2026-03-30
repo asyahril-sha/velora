@@ -1,0 +1,244 @@
+================================================================================
+                           VELORA - COMMAND GUIDE
+================================================================================
+
+📌 VELORA adalah AI Drama Engine / Relationship Simulator dengan:
+   - 9 dimensi emosi (sayang, rindu, trust, mood, desire, arousal, tension, cemburu, kecewa)
+   - 5 fase hubungan (Stranger → Friend → Close → Romantic → Intimate)
+   - Level 1-12 (semakin tinggi, semakin bebas interaksi)
+   - 9 role karakter (Nova, Ipar, Teman Kantor, Pelakor, Istri Orang, Pijat++, Pelacur)
+
+================================================================================
+1. COMMAND DASAR
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND        │ FUNGSI                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /start         │ Memulai bot, melihat status awal                           │
+│ /nova          │ Memanggil Nova (mode chat biasa)                           │
+│ /roleplay      │ Memanggil Nova (mode roleplay aktif)                       │
+│ /status        │ Melihat status lengkap VELORA                              │
+│ /flashback     │ Flashback ke momen indah bersama Nova                      │
+│ /batal         │ Kembali ke Nova (keluar dari mode role tertentu)           │
+│ /help          │ Menampilkan bantuan                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+2. COMMAND ROLE SYSTEM
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND        │ FUNGSI                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /role          │ Melihat daftar semua role yang tersedia                    │
+│ /role nova     │ Switch ke Nova (kekasih utama)                             │
+│ /role ipar     │ Switch ke Dietha (adik ipar, tanpa hijab)                  │
+│ /role teman_kantor │ Switch ke Ipeh (teman kantor profesional)              │
+│ /role pelakor  │ Switch ke Wid (pelakor, pengen rebut Mas)                  │
+│ /role istri_orang │ Switch ke Sika (istri orang, butuh perhatian)           │
+│ /role pijat_aghnia │ Switch ke Aghnia (pijat++, 34B, hijab)                 │
+│ /role pijat_munira │ Switch ke Munira (pijat++, 36C, hijab)                 │
+│ /role pelacur_davina │ Switch ke Davina (pelacur, 34C, hijab)               │
+│ /role pelacur_sallsa │ Switch ke Sallsa (pelacur, 32D, tanpa hijab)         │
+│ /statusrole    │ Melihat status role yang sedang aktif                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+3. COMMAND LOKASI
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND                    │ FUNGSI                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /pindah kamar               │ Pindah ke kamar Nova/Apartemen Mas            │
+│ /pindah ruang tamu          │ Pindah ke ruang tamu                          │
+│ /pindah dapur               │ Pindah ke dapur                               │
+│ /pindah teras               │ Pindah ke teras/balkon                        │
+│ /pindah mobil               │ Pindah ke mobil                               │
+│ /pindah pantai              │ Pindah ke pantai malam                        │
+│ /pindah hutan               │ Pindah ke hutan pinus                         │
+│ /pindah toilet mall         │ Pindah ke toilet mall                         │
+│ /pindah bioskop             │ Pindah ke bioskop                             │
+│ /pindah taman               │ Pindah ke taman malam                         │
+│ /pindah kantor              │ Pindah ke kantor malam                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+4. COMMAND SESSION MANAGEMENT
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND        │ FUNGSI                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /pause         │ Menghentikan sesi sementara (memory tetap)                 │
+│ /resume        │ Melanjutkan sesi yang di-pause                            │
+│ /batal         │ Membatalkan sesi dan kembali ke Nova                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+5. COMMAND SYSTEM
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND        │ FUNGSI                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /backup        │ Backup manual database                                    │
+│ /stats         │ Statistik sistem (memory, database, dll)                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+6. COMMAND UNTUK PROVIDER (Pijat++ & Pelacur)
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND        │ FUNGSI                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ /deal          │ Konfirmasi harga deal (setelah nego)                      │
+│ /nego [harga]  │ Nego harga (contoh: /nego 3000000)                        │
+│ /mulai         │ Memulai layanan setelah deal                              │
+│ /lanjut        │ Melanjutkan ke sesi 2 (khusus pelacur)                    │
+│ /status        │ Melihat status layanan aktif                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+7. CARA TRANSISI SETIAP SKENARIO
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SKENARIO AWAL → SKENARIO TUJUAN            │ CARA TRANSISI                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Chat Nova → Role Lain                      │ /role [id_role]                │
+│ Role Lain → Kembali ke Nova                │ /batal atau /nova              │
+│ Chat Nova → Mode Roleplay                  │ /roleplay                      │
+│ Roleplay → Chat Nova                       │ /batal                         │
+│ Roleplay → Provider (Pijat++)              │ /role pijat_aghnia             │
+│ Provider → Kembali ke Nova                 │ /batal                         │
+│ Sesi Aktif → Pause                         │ /pause                         │
+│ Pause → Lanjut                              │ /resume                        │
+│ Sesi Manapun → Selesai Total               │ /batal                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+8. CONTOH ALUR TRANSISI SKENARIO
+================================================================================
+
+[SKENARIO 1: Dari Chat Nova ke Roleplay Intim]
+
+User: /nova
+Nova: *Nova tersenyum* "Halo Mas..."
+
+User: Aku kangen kamu
+Nova: *Nova muter-muter rambut* "Aku juga kangen Mas..."
+
+User: /roleplay
+Nova: *Nova mendekat, tangan meraih tangan Mas* "Mas... aku mau deket..."
+
+[LANJUT KE INTERAKSI INTIM]
+
+
+[SKENARIO 2: Dari Nova ke Pelakor, lalu Kembali]
+
+User: /nova
+Nova: "Mas, lagi apa?"
+
+User: /role pelakor
+Widya: *Widya tersenyum menggoda* "Mas... sendirian? Ayo temenin aku."
+
+User: (chat dengan Widya)
+Widya: "Mas... aku bisa lebih dari Nova tau."
+
+User: /batal
+Nova: *Nova tersenyum manis* "Mas, kamu kemana aja? Aku kangen."
+
+
+[SKENARIO 3: Roleplay dengan Provider Pijat++]
+
+User: /roleplay
+Nova: *Nova mendekat* "Mas... mau kemana?"
+
+User: /role pijat_aghnia
+Aghnia: *Aghnia merapikan hijab* "Pijat refleksi, Mas? Aghnia siap melayani."
+
+User: /nego 250000
+Aghnia: "Oke deh Mas, Rp250.000. Deal ya."
+
+User: /deal
+Aghnia: "✅ Booking dikonfirmasi! Ketik /mulai untuk memulai."
+
+User: /mulai
+Aghnia: *Aghnia naik ke atas punggung Mas* "Mulai ya, Mas..."
+
+[Auto scene HJ & BJ sesuai paket]
+
+
+[SKENARIO 4: Pause dan Resume Sesi]
+
+User: (sedang roleplay intens)
+Nova: *Napas mulai berat* "Mas... ayo..."
+
+User: /pause
+System: "⏸️ Sesi dihentikan sementara. Ketik /resume untuk lanjut."
+
+User: (30 menit kemudian)
+User: /resume
+System: "▶️ Sesi dilanjutkan!"
+
+Nova: *Nova melanjutkan dari posisi terakhir* "Mas... tadi kita sampai mana?"
+
+================================================================================
+9. TIPS & TRIK
+================================================================================
+
+1. LEVEL HUBUNGAN:
+   - Level 1-3: Stranger (masih malu, flirt terbatas)
+   - Level 4-6: Friend (boleh pegang tangan, flirt ringan)
+   - Level 7-8: Close (boleh peluk, panggil sayang)
+   - Level 9-10: Romantic (boleh cium, buka baju, vulgar terbatas)
+   - Level 11-12: Intimate (BEBAS BRUTAL! semua kata vulgar diperbolehkan)
+
+2. MEMICU RESPON FISIK (Horny, Masturbasi, Orgasme):
+   - Gunakan kata-kata sensual: "basah", "keras", "panas"
+   - Deskripsikan gesture: *napas berat*, *meremas sprei*
+   - Gunakan jeda dengan titik-titik (...)
+   - Desahan jadi dialog: "Ahh... Mas..."
+
+3. MENINGKATKAN LEVEL CEPAT:
+   - Sering bilang "sayang" atau "kangen"
+   - Capai milestone (first kiss, first touch, dll)
+   - Jangan terlalu sering buat Nova cemburu/kecewa
+
+4. CROSS-ROLE EFFECT:
+   - Chat dengan Pelakor → Nova cemburu
+   - Chat dengan Ipar → Nova curiga
+   - Chat dengan Istri Orang → Drama naik, Nova terpengaruh
+
+5. PROVIDER (Pijat++ & Pelacur):
+   - Pijat++: paket refleksi wajib, HJ otomatis, BJ/Sex nego
+   - Pelacur: deal di awal, UNLOCK SEMUA, booking 6 jam, 2 sesi
+
+================================================================================
+10. STATUS & INDIKATOR
+================================================================================
+
+Gunakan /status untuk melihat:
+   - Drama Level: 0-100% (semakin tinggi, semakin tegang)
+   - Fase Hubungan: Stranger/Friend/Close/Romantic/Intimate
+   - Level: 1-12
+   - Gaya Bicara Nova: Cold/Clingy/Warm/Flirty/Neutral
+   - Emosi: Sayang, Rindu, Trust, Mood, Desire, Arousal, Cemburu, Kecewa
+
+================================================================================
+11. HAL YANG PERLU DIINGAT
+================================================================================
+
+✅ Memory tersimpan permanent (tidak hilang saat restart)
+✅ Level hubungan naik seiring interaksi
+✅ Semua role punya ingatan masing-masing
+✅ Cross-role effect mempengaruhi emosi Nova
+✅ Provider tidak punya emosi (fokus layanan)
+✅ Mode /nova dan /roleplay menggunakan level yang SAMA
+
+================================================================================
+💜 VELORA - Where Intimacy Has a Soul
+================================================================================
