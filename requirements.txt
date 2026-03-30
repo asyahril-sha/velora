@@ -1,6 +1,6 @@
 # =============================================================================
 # VELORA - AI Drama Engine / Relationship Simulator
-# Core Dependencies
+# Core Dependencies (UPDATED)
 # =============================================================================
 
 # Web Server
@@ -9,7 +9,7 @@ aiohttp>=3.9.0
 # Telegram Bot
 python-telegram-bot>=20.7
 
-# AI & DeepSeek
+# AI & DeepSeek (PASTIKAN VERSI INI)
 openai>=1.65.0
 
 # Configuration
