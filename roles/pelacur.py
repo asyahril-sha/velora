@@ -64,7 +64,9 @@ class PelacurRole(ServiceProviderBase):
             appearance=appearance,
             service_type=ServiceType.PELACUR,
             base_price=5000000,  # 5 juta
-            min_price=3000000    # nego sampai 3 juta
+            min_price=3000000,   # nego sampai 3 juta
+            personality=personality,
+            voice_style=voice_style
         )
         
         # ========== PELACUR SPECIFIC ==========
