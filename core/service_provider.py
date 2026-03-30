@@ -283,7 +283,16 @@ class ServiceProviderBase:
         self._memory_manager = None
                      
         logger.info(f"💼 ServiceProvider {name} initialized | Price: {base_price} | Type: {service_type.value}")
+
+    # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
     
+    def initialize(self, memory_manager):
+        """Initialize dengan memory manager"""
+        self._memory_manager = memory_manager
+        logger.info(f"🔗 Provider {self.name} connected to MemoryManager")
+        
     # =========================================================================
     # CUSTOMER MANAGEMENT
     # =========================================================================
