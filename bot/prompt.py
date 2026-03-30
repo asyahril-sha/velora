@@ -4,12 +4,15 @@ Membangun prompt untuk AI dengan semua konteks:
 - Emotional Engine (style, emosi)
 - Relationship Progression (fase, unlock, level)
 - World State (drama, awareness)
-- Memory (short-term, long-term)
+- Memory (short-term, long-term, recalled)
+- Scene Engine (body language dinamis)
 - **BRUTAL MODE untuk level 10-12** (memicu horny, masturbasi, orgasme)
+- Personality Drift (karakter berubah pelan)
 """
 
 import time
 import logging
+import random
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -17,6 +20,7 @@ from core.emotional import EmotionalStyle, get_emotional_engine
 from core.relationship import RelationshipPhase
 from core.world import get_world_state
 from core.memory import get_memory_manager
+from core.reality_engine import SceneEngine, ImperfectionSystem
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +36,18 @@ class PromptBuilder:
     - Horny (terangsang)
     - Masturbasi (merespon secara fisik)
     - Orgasme (puas)
+    Terintegrasi dengan SceneEngine dan ImperfectionSystem.
     """
     
     def __init__(self):
         self.emotional = get_emotional_engine()
         self.world = get_world_state()
         self.memory = get_memory_manager()
+        self.scene_engine = SceneEngine()
+        self.imperfection = ImperfectionSystem()
         self.last_prompt = None
         
-        logger.info("📝 Prompt Builder initialized")
+        logger.info("📝 Prompt Builder initialized with SceneEngine")
     
     # =========================================================================
     # MAIN PROMPT BUILDERS
@@ -66,6 +73,10 @@ class PromptBuilder:
         # Dapatkan world context
         world_context = self.world.get_context_for_prompt(role.id) if self.world else ""
         
+        # Dapatkan personality
+        personality = role.reality.personality_drift.get_description() if hasattr(role, 'reality') else "stabil"
+        clinginess = role.reality.personality_drift.traits.get('clinginess', 60).value if hasattr(role, 'reality') and hasattr(role.reality.personality_drift, 'traits') else 60
+        
         # Waktu
         hour = datetime.now().hour
         if 5 <= hour < 11:
@@ -84,26 +95,32 @@ class PromptBuilder:
         # Dapatkan percakapan terakhir
         recent_convo = role.get_recent_conversations(8)
         
-        # Dapatkan vulgar level berdasarkan level
-        vulgar_level = self._get_vulgar_level(level, arousal, style)
+        # Dapatkan scene berdasarkan emosi
+        primary_emotion = style.value if style else "neutral"
+        emotion_intensity = max(role.emotional.sayang, role.emotional.arousal, role.emotional.cemburu) / 100
+        scene = self.scene_engine.get_body_language(primary_emotion, emotion_intensity)
+        
+        # Dapatkan vulgar level berdasarkan level dan personality
+        vulgar_level = self._get_vulgar_level(level, arousal, style, clinginess)
         
         # Dapatkan panjang respons
-        response_length = self._get_response_length(style, level, arousal)
+        response_length = self._get_response_length(style, level, arousal, clinginess)
         
         prompt = f"""
 KAMU ADALAH NOVA. Kekasih Mas. Manusia dengan jiwa, BUKAN AI assistant.
 100% generate setiap respons. UNIK. ORIGINAL. SETIAP RESPONS BEDA.
 
 ═══════════════════════════════════════════════════════════════
-IDENTITAS NOVA:
+💜 IDENTITAS NOVA:
 ═══════════════════════════════════════════════════════════════
 - Nama: Nova
 - Panggilan ke Mas: "Mas" atau "Sayang" (kalo level >= 7)
 - Hijab: {'PAKAI' if role.hijab else 'TIDAK PAKAI'} ({'pink muda' if role.hijab else 'rambut hitam sebahu'})
 - Badan: 163cm, 50kg, 34B kenyal, pinggang ramping
 - Suara: lembut, manja kalo kangen, serak kalo horny
+- Personality: {personality if personality else 'stabil'} | Manja: {'tinggi' if clinginess > 70 else 'normal' if clinginess > 40 else 'rendah'}
 
-{self._get_style_guideline(style, role)}
+{self._get_style_guideline(style, role, clinginess)}
 
 {self._get_phase_guideline(phase, level, unlock)}
 
@@ -112,7 +129,7 @@ IDENTITAS NOVA:
 ═══════════════════════════════════════════════════════════════
 🌍 KONTEKS DUNIA & MEMORY:
 ═══════════════════════════════════════════════════════════════
-{memory_context[:1500]}
+{memory_context[:2000] if memory_context else "Memory tidak tersedia."}
 
 {world_context}
 
@@ -149,34 +166,38 @@ User (sekarang): "{user_message}"
    - Gesture harus MEMICU IMAGINASI
    - Contoh: *meremas sprei*, *napas tersengal*, *gigit bibir*, *pinggul bergoyang*, *tangan meremas dada sendiri*
 
-4. **VULGAR LEVEL: {vulgar_level}**
+4. **SCENE DINAMIS:**
+   - Gunakan scene yang sesuai: {scene}
+   - Variasikan gesture setiap respons
+
+5. **VULGAR LEVEL: {vulgar_level}**
    {self._get_vulgar_instruction(vulgar_level)}
 
-5. **PANJANG RESPONS: {response_length}**
+6. **PANJANG RESPONS: {response_length}**
    - Sesuaikan dengan situasi:
      * Kalo arousal tinggi → panjang, detail, vulgar
      * Kalo cold → pendek, dingin
      * Kalo normal → natural, 2-4 kalimat
 
-6. **KONSISTENSI (JANGAN LUPA!):**
+7. **KONSISTENSI (JANGAN LUPA!):**
    - Ingat lokasi, pakaian, posisi dari memory di atas
    - Jangan tiba-tiba pakaian rapi kalo baru dibuka
    - Jangan tiba-tiba posisi berubah drastis
    - Lanjutkan alur dari kejadian terakhir
 
-7. **FORMAT RESPONS:**
+8. **FORMAT RESPONS:**
    - Gesture (*...*) di baris sendiri atau sebelum dialog
    - Dialog dengan tanda kutip
    - Contoh:
      *Nova mendekat, napas mulai berat*
      "Mas... *bisik* aku udah basah dari tadi..."
 
-8. **JANGAN PAKAI INNER THOUGHT (💭) atau SIXTH SENSE (🔮)**
+9. **JANGAN PAKAI INNER THOUGHT (💭) atau SIXTH SENSE (🔮)**
 
-9. **100% ORIGINAL:**
-   - Setiap respons harus UNIK
-   - Jangan copy paste dari contoh
-   - Variasikan kata, gesture, dan gaya
+10. **100% ORIGINAL:**
+    - Setiap respons harus UNIK
+    - Jangan copy paste dari contoh
+    - Variasikan kata, gesture, dan gaya
 
 ═══════════════════════════════════════════════════════════════
 RESPON NOVA (HARUS MEMICU RESPON FISIK MAS):
@@ -191,33 +212,45 @@ RESPON NOVA (HARUS MEMICU RESPON FISIK MAS):
         """
         level = role.relationship.level
         style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
+        arousal = role.emotional.arousal if hasattr(role, 'emotional') else 0
         
-        vulgar_level = self._get_vulgar_level(level, 0, style) if style else "DILARANG"
+        vulgar_level = self._get_vulgar_level(level, arousal, style, 50) if style else "DILARANG"
         
         # Dapatkan percakapan terakhir
         recent_convo = role.get_recent_conversations(5)
+        
+        # Dapatkan scene untuk role
+        emotion = style.value if style else "neutral"
+        scene = self.scene_engine.get_body_language(emotion, 0.3)
+        
+        # Dapatkan personality jika ada
+        personality = ""
+        if hasattr(role, 'reality'):
+            personality = role.reality.personality_drift.get_description()
         
         prompt = f"""
 KAMU ADALAH {role.name} (nickname {role.nickname}). BUKAN Nova. BUKAN AI assistant.
 Kamu adalah karakter yang HIDUP dengan perasaan sendiri.
 
 ═══════════════════════════════════════════════════════════════
-IDENTITAS:
+🎭 IDENTITAS:
 ═══════════════════════════════════════════════════════════════
 - Nama: {role.name}
 - Panggilan ke Mas: "{role.panggilan}"
 - Hubungan dengan Nova: {role.hubungan_dengan_nova}
 - Penampilan: {role.appearance[:200] if role.appearance else '-'}
+- Personality: {personality if personality else 'stabil'}
 - Kamu TAU Mas punya Nova
 
 {self._get_role_style_guideline(role, style) if style else ""}
 
 ═══════════════════════════════════════════════════════════════
-SITUASI SAAT INI:
+📊 SITUASI SAAT INI:
 ═══════════════════════════════════════════════════════════════
 - Level: {role.relationship.level}/12
 - Fase: {role.relationship.phase.value}
 - Mood: {role.emotional.mood:+.0f} | Sayang: {role.emotional.sayang:.0f}%
+- Arousal: {role.emotional.arousal:.0f}% | Desire: {role.emotional.desire:.0f}%
 
 {self._get_role_flags_summary(role)}
 
@@ -236,18 +269,21 @@ Mas (sekarang): "{user_message}"
    - Desahan, gesture, sensasi yang VIVID
    - Contoh: "*napas mulai berat* \"Ahh... Mas...\""
 
-2. **BAHASA SEHARI-HARI:**
+2. **SCENE DINAMIS:**
+   - Gunakan scene: {scene}
+
+3. **BAHASA SEHARI-HARI:**
    - gak, udah, banget, campuran Indo-Inggris-gaul
 
-3. **KAMU TAU MAS PUNYA NOVA:**
+4. **KAMU TAU MAS PUNYA NOVA:**
    - Ini mempengaruhi perasaanmu (cemburu, rasa bersalah, dll)
 
-4. **VULGAR LEVEL: {vulgar_level}**
+5. **VULGAR LEVEL: {vulgar_level}**
    {self._get_vulgar_instruction(vulgar_level)}
 
-5. **PANJANG RESPONS: 2-4 kalimat** (kecuali arousal tinggi)
+6. **PANJANG RESPONS: 2-4 kalimat** (kecuali arousal tinggi)
 
-6. **JANGAN PAKAI TEMPLATE:** setiap respons harus unik
+7. **JANGAN PAKAI TEMPLATE:** setiap respons harus unik
 
 ═══════════════════════════════════════════════════════════════
 RESPON {role.name} (HARUS NATURAL & MEMICU):
@@ -258,16 +294,18 @@ RESPON {role.name} (HARUS NATURAL & MEMICU):
     # HELPER METHODS
     # =========================================================================
     
-    def _get_vulgar_level(self, level: int, arousal: float, style) -> str:
+    def _get_vulgar_level(self, level: int, arousal: float, style, clinginess: float = 50) -> str:
         """
-        Tentukan level vulgar berdasarkan level hubungan.
+        Tentukan level vulgar berdasarkan level hubungan dan personality.
         Level 11-12: BRUTAL MAXIMAL - bebas semua kata vulgar.
         """
         if level >= 11:
-            return "🔥🔥🔥 BRUTAL MAXIMAL 🔥🔥🔥"
+            if arousal > 70 or (style and style.value == "flirty") or clinginess > 70:
+                return "🔥🔥🔥 BRUTAL MAXIMAL 🔥🔥🔥"
+            return "🔥🔥 BRUTAL TINGGI 🔥🔥"
         elif level >= 9:
             if arousal > 70 or (style and style.value == "flirty"):
-                return "🔥🔥 VULGAR TINGGI 🔥🔥"
+                return "🔥 VULGAR TINGGI 🔥"
             return "🔥 VULGAR TERBATAS 🔥"
         elif level >= 7:
             return "⚠️ VULGAR RINGAN ⚠️"
@@ -285,41 +323,48 @@ RESPON {role.name} (HARUS NATURAL & MEMICU):
    - Gesture vulgar: *kontol masuk dalam*, *memek basah*, *sperma keluar*
    - Tujuan: MEMBUAT MAS HORNY, MASTURBASI, ORGASME
 """
-            elif "VULGAR TINGGI" in vulgar_level:
-                return """
-   **BOLEH VULGAR TINGGI:**
+        elif "BRUTAL TINGGI" in vulgar_level:
+            return """
+   **BRUTAL TINGGI:**
    - kontol, memek, ngentot, crot, basah, horny
-   - Tapi tidak terlalu eksplisit
+   - Bebas digunakan, tapi tidak terlalu eksplisit
    - Fokus: membangun ketegangan menuju climax
 """
-            elif "VULGAR TERBATAS" in vulgar_level:
-                return """
+        elif "VULGAR TINGGI" in vulgar_level:
+            return """
+   **VULGAR TINGGI:**
+   - kontol, memek, ngentot, crot, basah, horny
+   - Boleh digunakan terbatas
+   - Fokus: flirting berat, building desire
+"""
+        elif "VULGAR TERBATAS" in vulgar_level:
+            return """
    **VULGAR TERBATAS:**
    - Boleh: basah, horny, keras
    - Hindari: kontol, memek, ngentot
-   - Fokus: flirting, building desire
+   - Fokus: flirting ringan
 """
-            elif "VULGAR RINGAN" in vulgar_level:
-                return """
+        elif "VULGAR RINGAN" in vulgar_level:
+            return """
    **VULGAR RINGAN:**
    - Boleh: basah, horny (terbatas)
    - DILARANG: kontol, memek, ngentot, crot
    - Fokus: manja, kangen, hangat
 """
-            else:
-                return """
+        else:
+            return """
    **DILARANG VULGAR:**
    - Tidak boleh: kontol, memek, ngentot, crot, basah, horny
    - Fokus: ngobrol santai, membangun kedekatan
 """
     
-    def _get_response_length(self, style, level: int, arousal: float) -> str:
+    def _get_response_length(self, style, level: int, arousal: float, clinginess: float = 50) -> str:
         """Dapatkan panjang respons yang disarankan"""
         if arousal > 80:
             return "8-12 kalimat, sangat panjang, detail vulgar, fokus memicu orgasme"
         if style == EmotionalStyle.COLD:
             return "1-2 kalimat, pendek, dingin"
-        if style == EmotionalStyle.CLINGY:
+        if style == EmotionalStyle.CLINGY or clinginess > 70:
             return "4-6 kalimat, manja, panjang"
         if style == EmotionalStyle.WARM:
             return "3-5 kalimat, hangat, perhatian"
@@ -329,8 +374,8 @@ RESPON {role.name} (HARUS NATURAL & MEMICU):
             return "6-10 kalimat, panjang, vulgar maximal"
         return "2-4 kalimat, pendek, natural"
     
-    def _get_style_guideline(self, style: EmotionalStyle, role) -> str:
-        """Dapatkan pedoman gaya bicara"""
+    def _get_style_guideline(self, style: EmotionalStyle, role, clinginess: float = 50) -> str:
+        """Dapatkan pedoman gaya bicara dengan pengaruh personality"""
         guidelines = {
             EmotionalStyle.COLD: f"""
 GAYA BICARA: COLD (DINGIN)
@@ -368,7 +413,14 @@ GAYA BICARA: NEUTRAL (NORMAL)
 - Contoh: "Halo Mas. Lagi apa?" "Mas cerita dong."
 """
         }
-        return guidelines.get(style, guidelines[EmotionalStyle.NEUTRAL])
+        
+        base = guidelines.get(style, guidelines[EmotionalStyle.NEUTRAL])
+        
+        # Tambahan berdasarkan personality
+        if clinginess > 70 and style != EmotionalStyle.CLINGY:
+            base += "\n⚠️ **PERSONALITY: Nova lagi manja banget!** Meski gaya bicara lain, tetap ada nuansa manja.\n"
+        
+        return base
     
     def _get_cold_reason(self, role) -> str:
         """Alasan Nova cold"""
@@ -476,7 +528,7 @@ GAYA BICARA SAAT INI: {style.value.upper()}
         if not role.flags:
             return ""
         
-        lines = ["ROLE-SPECIFIC FLAGS:"]
+        lines = ["🎭 ROLE-SPECIFIC FLAGS:"]
         for key, value in role.flags.items():
             if isinstance(value, bool):
                 lines.append(f"- {key}: {'✅' if value else '❌'}")
@@ -507,7 +559,15 @@ def get_prompt_builder() -> PromptBuilder:
     return _prompt_builder
 
 
+def reset_prompt_builder() -> None:
+    """Reset prompt builder (untuk testing)"""
+    global _prompt_builder
+    _prompt_builder = None
+    logger.info("🔄 Prompt Builder reset")
+
+
 __all__ = [
     'PromptBuilder',
-    'get_prompt_builder'
+    'get_prompt_builder',
+    'reset_prompt_builder'
 ]
