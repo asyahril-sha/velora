@@ -24,7 +24,28 @@ from worker.background import get_worker
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# HELPER - SAFE REPLY
+# =============================================================================
 
+def safe_markdown(text: str) -> str:
+    """Escape text for Telegram MarkdownV2"""
+    if not text:
+        return ""
+    return escape_markdown(text, version=2)
+
+
+async def safe_reply(update: Update, text: str, parse_mode: str = "MarkdownV2"):
+    """Safe reply with markdown escape"""
+    if not text:
+        return
+    try:
+        safe_text = escape_markdown(text, version=2)
+        await update.message.reply_text(safe_text, parse_mode=parse_mode)
+    except Exception as e:
+        logger.warning(f"Markdown error, sending plain: {e}")
+        await update.message.reply_text(text)
+        
 # =============================================================================
 # USER MODE TRACKING
 # =============================================================================
@@ -61,6 +82,9 @@ def clear_user_mode(user_id: int):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler /start"""
+    if not update or not update.effective_user:
+        return
+    
     user_id = update.effective_user.id
     settings = get_settings()
     
@@ -68,30 +92,33 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_id != settings.admin_id:
         await update.message.reply_text(
-            "💜 Halo! Bot ini untuk Mas.\n\n"
-            "Kirim /help untuk melihat perintah yang tersedia."
+            "💜 Halo! Bot ini untuk Mas.\n\nKirim /help untuk melihat perintah."
         )
         return
     
     clear_user_mode(user_id)
     
-    # Dapatkan status awal
     world = get_world_state()
     memory = get_memory_manager()
     
-    await update.message.reply_text(
-        f"💜 **VELORA - AI Drama Engine** 💜\n\n"
-        f"Selamat datang, Mas.\n\n"
-        f"🌍 **Drama Level:** {world.drama_level:.0f}%\n"
-        f"📝 **Memory Events:** {memory.total_events}\n\n"
-        f"Gunakan /help untuk melihat semua perintah.\n"
-        f"Ketik /nova untuk memanggil Nova.",
-        parse_mode="Markdown"
-    )
+    text = f"""💜 VELORA - AI Drama Engine 💜
+
+Selamat datang, Mas.
+
+🌍 Drama Level: {world.drama_level:.0f}%
+📝 Memory Events: {memory.total_events}
+
+Gunakan /help untuk melihat semua perintah.
+Ketik /nova untuk memanggil Nova."""
+    
+    await safe_reply(update, text)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler /help"""
+    if not update or not update.effective_user:
+        return
+    
     user_id = update.effective_user.id
     settings = get_settings()
     
@@ -100,52 +127,54 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     help_text = """
-📖 *BANTUAN VELORA*
+📖 BANTUAN VELORA
 
-*Command Utama:*
-• `/nova` - Memanggil Nova
-• `/status` - Status lengkap VELORA
-• `/flashback` - Flashback momen indah
+Command Utama:
+• /nova - Memanggil Nova
+• /status - Status lengkap VELORA
+• /flashback - Flashback momen indah
 
-*Roleplay:*
-• `/roleplay` - Mode roleplay dengan Nova
-• `/role` - Lihat daftar role
-• `/role <id>` - Switch ke role tertentu
-• `/statusrole` - Status role aktif
-• `/batal` - Kembali ke Nova
+Roleplay:
+• /roleplay - Mode roleplay dengan Nova
+• /role - Lihat daftar role
+• /role <id> - Switch ke role tertentu
+• /statusrole - Status role aktif
+• /batal - Kembali ke Nova
 
-*Lokasi:*
-• `/pindah <tempat>` - Pindah lokasi
-  Tempat: kamar, ruang tamu, dapur, teras, mobil, pantai, hutan, dll
+Lokasi:
+• /pindah <tempat> - Pindah lokasi
 
-*Sesi:*
-• `/pause` - Hentikan sesi sementara
-• `/resume` - Lanjutkan sesi
-• `/batal` - Batalkan sesi
+Sesi:
+• /pause - Hentikan sesi sementara
+• /resume - Lanjutkan sesi
+• /batal - Batalkan sesi
 
-*System:*
-• `/backup` - Backup manual database
-• `/stats` - Statistik sistem
-• `/help` - Bantuan ini
+System:
+• /backup - Backup manual database
+• /stats - Statistik sistem
+• /help - Bantuan ini
 
-*Role yang Tersedia:*
-• `nova` - Nova (kekasih)
-• `ipar` - Dietha (adik ipar)
-• `teman_kantor` - Ipeh (teman kantor)
-• `pelakor` - Wid (pelakor)
-• `istri_orang` - Sika (istri orang)
-• `pijat_aghnia` - Aghnia (pijat++)
-• `pijat_munira` - Munira (pijat++)
-• `pelacur_davina` - Davina (pelacur)
-• `pelacur_sallsa` - Sallsa (pelacur)
+Role yang Tersedia:
+• nova - Nova (kekasih)
+• ipar - Dietha (adik ipar)
+• teman_kantor - Ipeh (teman kantor)
+• pelakor - Wid (pelakor)
+• istri_orang - Sika (istri orang)
+• pijat_aghnia - Aghnia (pijat++)
+• pijat_munira - Munira (pijat++)
+• pelacur_davina - Davina (pelacur)
+• pelacur_sallsa - Sallsa (pelacur)
 
-Gunakan `/role <id>` untuk memanggil role tertentu.
+Gunakan /role <id> untuk memanggil role tertentu.
 """
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await safe_reply(update, help_text)
 
 
 async def nova_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler /nova - Panggil Nova"""
+    if not update or not update.effective_user:
+        return
+    
     user_id = update.effective_user.id
     settings = get_settings()
     
@@ -156,18 +185,20 @@ async def nova_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_user_mode(user_id)
     set_user_mode(user_id, "chat")
     
-    # Dapatkan orchestrator
     orchestrator = await get_orchestrator()
-    
-    # Switch ke Nova
     role_manager = get_role_manager()
+    
+    if not role_manager:
+        await update.message.reply_text("Role manager error.")
+        return
+    
     response = role_manager.switch_role("nova", user_id)
     
-    # Update activity di worker
     worker = get_worker()
-    worker.update_activity(user_id)
+    if worker:
+        worker.update_activity(user_id)
     
-    await update.message.reply_text(response, parse_mode="Markdown")
+    await safe_reply(update, response)
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -343,6 +374,9 @@ async def pindah_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def role_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler /role - List role atau switch ke role tertentu"""
+    if not update or not update.effective_user:
+        return
+    
     user_id = update.effective_user.id
     settings = get_settings()
     
@@ -350,54 +384,59 @@ async def role_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     role_manager = get_role_manager()
+    if not role_manager:
+        await update.message.reply_text("Role manager error.")
+        return
+    
     args = context.args
     
     if not args:
-        # Tampilkan daftar role
         roles = role_manager.get_all_roles()
-        lines = ["📋 **DAFTAR ROLE VELORA**", ""]
+        lines = ["📋 DAFTAR ROLE VELORA", ""]
         
-        # Group by role type
         main_roles = [r for r in roles if r['role_type'] in ['nova', 'ipar', 'teman_kantor', 'pelakor', 'istri_orang']]
         provider_roles = [r for r in roles if r['role_type'] in ['pijat_plus_plus', 'pelacur']]
         
         if main_roles:
-            lines.append("**💜 MAIN ROLES:**")
+            lines.append("MAIN ROLES:")
             for r in main_roles:
-                lines.append(f"• `/role {r['id']}` - {r['nama']} (Level {r['level']})")
+                lines.append(f"• /role {r['id']} - {r['nama']} (Level {r['level']})")
             lines.append("")
         
         if provider_roles:
-            lines.append("**💆‍♀️ PROVIDER:**")
+            lines.append("PROVIDER:")
             for r in provider_roles:
                 hijab_text = "hijab" if r['hijab'] else "tanpa hijab"
-                lines.append(f"• `/role {r['id']}` - {r['nama']} ({r['boob_size']}, {hijab_text})")
+                lines.append(f"• /role {r['id']} - {r['nama']} ({r['boob_size']}, {hijab_text})")
         
         lines.append("")
-        lines.append("Ketik **/batal** untuk kembali ke Nova.")
+        lines.append("Ketik /batal untuk kembali ke Nova.")
         
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        await update.message.reply_text("\n".join(lines))
         return
     
     role_id = args[0].lower()
     
-    # Cek apakah role ada
     role = role_manager.get_role(role_id)
     if not role:
         await update.message.reply_text(f"Role '{role_id}' tidak ditemukan.")
         return
     
-    # Switch ke role
     clear_user_mode(user_id)
     set_user_mode(user_id, "role", role_id)
     
     response = role_manager.switch_role(role_id, user_id)
     
-    # Update activity
     worker = get_worker()
-    worker.update_activity(user_id)
+    if worker:
+        worker.update_activity(user_id)
     
-    await update.message.reply_text(response, parse_mode="Markdown")
+    # Kirim dengan fallback jika Markdown error
+    try:
+        await safe_reply(update, response)
+    except Exception as e:
+        logger.warning(f"Error sending response for role {role_id}: {e}")
+        await update.message.reply_text(response)
 
 
 async def statusrole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -662,5 +701,7 @@ __all__ = [
     'set_user_mode',
     'get_active_role',
     'clear_user_mode',
-    'register_handlers'
+    'register_handlers',
+    'safe_reply',
+    'safe_markdown'
 ]
