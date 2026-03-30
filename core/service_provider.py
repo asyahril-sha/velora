@@ -199,7 +199,7 @@ class ProfessionalRelationship:
 # SERVICE PROVIDER BASE
 # =============================================================================
 
-class ServiceProviderBase(BaseRole):
+class ServiceProviderBase:
     """
     Base class untuk semua provider jasa.
     Tidak punya emosi, fokus pada layanan profesional.
