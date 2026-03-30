@@ -276,7 +276,10 @@ class ServiceProviderBase:
         # ========== TIMESTAMPS ==========
         self.created_at: float = time.time()
         self.last_interaction: float = time.time()
-        
+
+        # ========== MEMORY MANAGER ==========
+        self._memory_manager = None
+                     
         logger.info(f"💼 ServiceProvider {name} initialized | Price: {base_price} | Type: {service_type.value}")
     
     # =========================================================================
