@@ -360,6 +360,16 @@ def _split_long_message(text: str, max_length: int = 4000) -> list:
     
     return parts
 
+async def safe_reply(update: Update, text: str, parse_mode: str = "MarkdownV2"):
+    """Safe reply dengan fallback jika Markdown error"""
+    if not text:
+        return
+    try:
+        safe_text = escape_markdown(text, version=2)
+        await update.message.reply_text(safe_text, parse_mode=parse_mode)
+    except Exception as e:
+        logger.warning(f"Markdown error, sending plain: {e}")
+        await update.message.reply_text(text)
 
 # =============================================================================
 # EXPORTS
@@ -373,5 +383,6 @@ __all__ = [
     'document_handler',
     'error_handler',
     'RateLimiter',
-    '_rate_limiter'
+    '_rate_limiter',
+    'safe_replay'
 ]
