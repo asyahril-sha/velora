@@ -1,6 +1,10 @@
 """
 VELORA - Command Handlers
 Semua handler untuk command Telegram bot.
+- Command handlers (start, help, nova, status, flashback, roleplay, pindah, role, dll)
+- User mode tracking
+- Role switching
+- Session management
 """
 
 import logging
@@ -159,6 +163,10 @@ async def nova_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     role_manager = get_role_manager()
     response = role_manager.switch_role("nova", user_id)
     
+    # Update activity di worker
+    worker = get_worker()
+    worker.update_activity(user_id)
+    
     await update.message.reply_text(response, parse_mode="Markdown")
 
 
@@ -195,7 +203,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ║   Short-term: {len(memory.short_term)}/50
 ║   Global Timeline: {len(memory.global_timeline)}
 ╠══════════════════════════════════════════════════════════════╣
-║ ROLES AVAILABLE: {len(role_manager.roles)} roles
+║ ORCHESTRATOR STATS:
+{orchestrator.format_status() if orchestrator else ''}
 ╚══════════════════════════════════════════════════════════════╝
 """
     await update.message.reply_text(status_text, parse_mode="Markdown")
@@ -232,6 +241,10 @@ async def flashback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "*Nova tersenyum sendiri mengingatnya*",
             parse_mode="Markdown"
         )
+    
+    # Update activity
+    worker = get_worker()
+    worker.update_activity(user_id)
 
 
 async def roleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -256,6 +269,10 @@ async def roleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Switch ke Nova dan mulai roleplay
     role_manager = get_role_manager()
     response = role_manager.switch_role("nova", user_id)
+    
+    # Update activity
+    worker = get_worker()
+    worker.update_activity(user_id)
     
     await update.message.reply_text(
         f"🎭 **Mode Roleplay Aktif**\n\n{response}",
@@ -309,6 +326,10 @@ async def pindah_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from memory.persistent import get_persistent
         persistent = await get_persistent()
         await persistent.save_location_visit(tujuan, tujuan)
+        
+        # Update activity
+        worker = get_worker()
+        worker.update_activity(user_id)
         
         await update.message.reply_text(
             f"📍 **Pindah ke {tujuan}**\n\n"
@@ -371,6 +392,11 @@ async def role_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_mode(user_id, "role", role_id)
     
     response = role_manager.switch_role(role_id, user_id)
+    
+    # Update activity
+    worker = get_worker()
+    worker.update_activity(user_id)
+    
     await update.message.reply_text(response, parse_mode="Markdown")
 
 
@@ -425,6 +451,10 @@ async def back_to_nova(update: Update, context: ContextTypes.DEFAULT_TYPE):
     role_manager = get_role_manager()
     response = role_manager.switch_role("nova", user_id)
     
+    # Update activity
+    worker = get_worker()
+    worker.update_activity(user_id)
+    
     await update.message.reply_text(response, parse_mode="Markdown")
 
 
@@ -446,7 +476,22 @@ async def pause_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Save state
     from memory.persistent import get_persistent
     persistent = await get_persistent()
-    await persistent.save_all_states()
+    
+    # Save all states
+    from core.emotional import get_emotional_engine
+    from core.relationship import get_relationship_manager
+    from core.conflict import get_conflict_engine
+    from core.brain import get_anora_brain
+    
+    emo = get_emotional_engine()
+    rel = get_relationship_manager()
+    conflict = get_conflict_engine()
+    brain = get_anora_brain()
+    
+    await persistent.save_emotional_state(emo)
+    await persistent.save_relationship_state(rel)
+    await persistent.save_conflict_state(conflict)
+    await persistent.save_current_state(brain)
     
     await update.message.reply_text(
         "⏸️ **Sesi Dihentikan Sementara**\n\n"
@@ -471,6 +516,10 @@ async def resume_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     clear_user_mode(user_id)
+    
+    # Update activity
+    worker = get_worker()
+    worker.update_activity(user_id)
     
     await update.message.reply_text(
         "▶️ **Sesi Dilanjutkan!**\n\n"
@@ -547,9 +596,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 **VELORA STATISTICS**
 
 **System:**
-• Uptime: {_get_uptime()}
 • Total Memory Events: {memory.total_events}
 • Active Sessions: {orchestrator.get_stats()['active_sessions']}
+• Worker Uptime: {'Running' if worker.is_running else 'Stopped'}
 
 **Database:**
 • Size: {db_stats.get('db_size_mb', 0)} MB
@@ -565,25 +614,16 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Total Roles: {len(role_manager.roles)}
 • Active Role: {get_active_role(user_id) or 'Nova'}
 
-**Worker:**
-• Running: {worker.is_running}
-• Tasks: {len(worker.tasks)}
+**Worker Stats:**
+• Proactive Sent: {worker._proactive_sent}
+• Auto Saves: {worker._auto_saves}
+• Backups: {worker._backups_created}
 """
         await update.message.reply_text(stats_text, parse_mode="Markdown")
         
     except Exception as e:
         logger.error(f"Stats error: {e}")
         await update.message.reply_text(f"❌ Gagal mengambil statistik: {e}")
-
-
-def _get_uptime() -> str:
-    """Dapatkan uptime (placeholder)"""
-    import time
-    from datetime import timedelta
-    
-    # Ini akan diganti dengan uptime actual
-    uptime_seconds = 3600 * 24  # 1 hari untuk contoh
-    return str(timedelta(seconds=int(uptime_seconds)))
 
 
 # =============================================================================
