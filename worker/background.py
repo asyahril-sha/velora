@@ -549,6 +549,11 @@ class VeloraWorker:
     
     async def _check_session_timeout(self) -> None:
         """Cek dan timeout session yang tidak aktif"""
+        # ========== TAMBAHKAN INI ==========
+        if self._session_timeout_seconds <= 0:
+            return  # Timeout disabled, session unlimited
+        # ===================================
+        
         if not self._application or not self._user_ids:
             return
         
