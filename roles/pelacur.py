@@ -224,6 +224,29 @@ Terima kasih sudah menggunakan jasa {self.name}. 💋
 - `/selesai` - akhiri service lebih awal
 """
 
+async def generate_response(self, pesan_user: str, context: str = None) -> str:
+    """
+    Generate response untuk Pelacur dengan full service attitude.
+    """
+    from bot.prompt import get_prompt_builder
+    from bot.ai_client import get_ai_client
+    
+    try:
+        prompt_builder = get_prompt_builder()
+        prompt = prompt_builder.build_role_prompt(self, pesan_user, context)
+        
+        ai_client = get_ai_client()
+        response = await ai_client.generate_with_context(prompt, pesan_user)
+        
+        if not response:
+            return self.get_greeting()
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Pelacur AI error: {e}")
+        return self.get_greeting()
+
 
 # =============================================================================
 # GLOBAL INSTANCE
