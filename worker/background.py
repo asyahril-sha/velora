@@ -5,7 +5,7 @@ Menjalankan task-task periodic di background:
 - Conflict decay (konflik reda pelan)
 - Mood recovery (mood pulih seiring waktu)
 - Auto save state ke database
-- Proactive chat (Nova chat duluan) - TERINTEGRASI DENGAN PROMPT BUILDER
+- Proactive chat (Nova chat duluan)
 - Auto scene (untuk provider: pijat++, pelacur)
 - Auto backup database
 - Booking expiry check
@@ -32,7 +32,6 @@ class VeloraWorker:
     """
     Background worker untuk VELORA.
     Menjalankan task-task periodic secara async.
-    Terintegrasi dengan PromptBuilder untuk proactive chat yang natural.
     """
     
     def __init__(self):
@@ -51,7 +50,6 @@ class VeloraWorker:
         self.session_timeout_interval = 300  # 5 menit
         self.personality_interval = 3600  # 1 jam
         self.backup_interval = 21600    # 6 jam
-        self.natural_intimacy_interval = 180  # 3 menit (BARU)
         
         # ========== LAST RUN TIMES ==========
         self.last_rindu_run = 0
@@ -65,7 +63,6 @@ class VeloraWorker:
         self.last_session_timeout_run = 0
         self.last_personality_run = 0
         self.last_backup_run = 0
-        self.last_natural_intimacy_run = 0  # BARU
         
         # ========== REFERENCES ==========
         self._application = None
@@ -78,15 +75,10 @@ class VeloraWorker:
         self._get_brain = None
         self._get_world = None
         self._get_role_manager = None
-        self._get_prompt_builder = None  # BARU
         
         # ========== PROACTIVE COOLDOWN PER USER ==========
         self._proactive_cooldown: Dict[int, float] = {}
         self._proactive_cooldown_seconds = 3600  # 1 jam
-        
-        # ========== NATURAL INTIMACY COOLDOWN (BARU) ==========
-        self._intimacy_cooldown: Dict[int, float] = {}
-        self._intimacy_cooldown_seconds = 1800  # 30 menit
         
         # ========== SESSION TIMEOUT ==========
         self._session_timeout_seconds = 1800  # 30 menit
@@ -103,7 +95,6 @@ class VeloraWorker:
         self._bookings_expired = 0
         self._sessions_timeout = 0
         self._backups_created = 0
-        self._natural_intimacy_sent = 0  # BARU
         
         logger.info("🔄 VeloraWorker initialized")
     
@@ -134,18 +125,30 @@ class VeloraWorker:
         self._get_world = get_world
         self._get_role_manager = get_role_manager
         
-        # Lazy import prompt builder
-        try:
-            from bot.prompt import get_prompt_builder
-            self._get_prompt_builder = get_prompt_builder
-        except ImportError:
-            logger.warning("PromptBuilder not available for worker")
-        
         # Initialize last activity for users
         for user_id in self._user_ids:
             self._last_activity[user_id] = time.time()
         
         logger.info(f"🔧 VeloraWorker initialized with {len(self._user_ids)} users")
+    
+    def add_user(self, user_id: int) -> None:
+        """Tambah user ke daftar yang dipantau"""
+        if user_id not in self._user_ids:
+            self._user_ids.append(user_id)
+            self._last_activity[user_id] = time.time()
+            logger.info(f"👤 User {user_id} added to worker monitoring")
+    
+    def remove_user(self, user_id: int) -> None:
+        """Hapus user dari daftar yang dipantau"""
+        if user_id in self._user_ids:
+            self._user_ids.remove(user_id)
+            self._last_activity.pop(user_id, None)
+            self._proactive_cooldown.pop(user_id, None)
+            logger.info(f"👤 User {user_id} removed from worker monitoring")
+    
+    def update_activity(self, user_id: int) -> None:
+        """Update last activity timestamp untuk user"""
+        self._last_activity[user_id] = time.time()
     
     # =========================================================================
     # START & STOP
@@ -172,13 +175,224 @@ class VeloraWorker:
             asyncio.create_task(self._session_timeout_loop()),
             asyncio.create_task(self._personality_loop()),
             asyncio.create_task(self._backup_loop()),
-            asyncio.create_task(self._natural_intimacy_loop()),  # BARU
         ]
         
         logger.info("🔄 All background loops started")
     
+    async def stop(self) -> None:
+        """Stop semua background tasks"""
+        self.is_running = False
+        
+        for task in self.tasks:
+            task.cancel()
+        
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        self.tasks.clear()
+        
+        logger.info("🔄 All background loops stopped")
+    
     # =========================================================================
-    # PROACTIVE CHAT LOOP (NOVA) - DENGAN PROMPT BUILDER
+    # RINDU GROWTH LOOP
+    # =========================================================================
+    
+    async def _rindu_loop(self) -> None:
+        """Rindu naik setiap kali lama gak interaksi"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_rindu_run
+            
+            if elapsed >= self.rindu_interval:
+                await self._update_rindu()
+                self.last_rindu_run = now
+                self._rindu_updates += 1
+            
+            await asyncio.sleep(60)
+    
+    async def _update_rindu(self) -> None:
+        """Update rindu berdasarkan waktu terakhir interaksi"""
+        try:
+            if not self._get_emotional_engine:
+                return
+            
+            emo = self._get_emotional_engine()
+            last_interaction = emo.last_interaction
+            now = time.time()
+            hours_inactive = (now - last_interaction) / 3600
+            
+            if hours_inactive > 1:
+                emo.update_rindu_from_inactivity(hours_inactive)
+                logger.info(f"🌙 Rindu updated: {emo.rindu:.1f}% (inactive {hours_inactive:.1f}h)")
+                
+                # Sync ke tracker jika ada
+                if self._get_brain:
+                    brain = self._get_brain()
+                    if hasattr(brain, 'tracker'):
+                        brain.tracker.add_to_timeline(
+                            f"Rindu naik karena {hours_inactive:.1f} jam gak chat",
+                            f"Rindu: {emo.rindu:.1f}%"
+                        )
+                        
+        except Exception as e:
+            logger.error(f"Rindu update error: {e}")
+    
+    # =========================================================================
+    # CONFLICT DECAY LOOP
+    # =========================================================================
+    
+    async def _conflict_loop(self) -> None:
+        """Conflict decay setiap 30 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_conflict_run
+            
+            if elapsed >= self.conflict_interval:
+                await self._decay_conflicts()
+                self.last_conflict_run = now
+                self._conflict_decays += 1
+            
+            await asyncio.sleep(60)
+    
+    async def _decay_conflicts(self) -> None:
+        """Decay konflik berdasarkan waktu"""
+        try:
+            if not self._get_conflict_engine:
+                return
+            
+            conflict = self._get_conflict_engine()
+            conflict.update_decay(0.5)  # decay 30 menit = 0.5 jam
+            
+            logger.debug(f"⚡ Conflict decay: cemburu={conflict.cemburu:.1f}, kecewa={conflict.kecewa:.1f}")
+            
+        except Exception as e:
+            logger.error(f"Conflict decay error: {e}")
+    
+    # =========================================================================
+    # MOOD RECOVERY LOOP
+    # =========================================================================
+    
+    async def _mood_loop(self) -> None:
+        """Mood recovery setiap 1 jam"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_mood_run
+            
+            if elapsed >= self.mood_interval:
+                await self._recover_mood()
+                self.last_mood_run = now
+                self._mood_recoveries += 1
+            
+            await asyncio.sleep(60)
+    
+    async def _recover_mood(self) -> None:
+        """Mood pulih seiring waktu"""
+        try:
+            if not self._get_emotional_engine:
+                return
+            
+            emo = self._get_emotional_engine()
+            
+            # Mood naik pelan kalo gak ada konflik aktif
+            if emo.mood < 0 and not emo.is_angry and not emo.is_hurt:
+                recovery = min(10, abs(emo.mood) * 0.3)
+                emo.mood = min(0, emo.mood + recovery)
+                logger.info(f"😊 Mood recovery: {emo.mood:+.1f}")
+            
+            # Mood juga naik kalo trust tinggi
+            if emo.trust > 70 and emo.mood < 20:
+                emo.mood = min(50, emo.mood + 5)
+                logger.info(f"😊 Mood +5 from high trust")
+            
+        except Exception as e:
+            logger.error(f"Mood recovery error: {e}")
+    
+    # =========================================================================
+    # DRAMA DECAY LOOP
+    # =========================================================================
+    
+    async def _drama_loop(self) -> None:
+        """Drama decay setiap 30 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_drama_run
+            
+            if elapsed >= self.drama_interval:
+                await self._decay_drama()
+                self.last_drama_run = now
+                self._drama_decays += 1
+            
+            await asyncio.sleep(60)
+    
+    async def _decay_drama(self) -> None:
+        """Decay drama berdasarkan waktu"""
+        try:
+            if not self._get_world:
+                return
+            
+            world = self._get_world()
+            world.update_drama_decay(0.5)  # decay 30 menit = 0.5 jam
+            
+            logger.debug(f"📉 Drama decay: {world.drama_level:.1f}%")
+            
+        except Exception as e:
+            logger.error(f"Drama decay error: {e}")
+    
+    # =========================================================================
+    # AUTO SAVE LOOP
+    # =========================================================================
+    
+    async def _save_loop(self) -> None:
+        """Save state ke database setiap 1 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_save_run
+            
+            if elapsed >= self.save_interval:
+                await self._save_all_states()
+                self.last_save_run = now
+                self._auto_saves += 1
+            
+            await asyncio.sleep(30)
+    
+    async def _save_all_states(self) -> None:
+        """Simpan semua state ke database"""
+        try:
+            if not self._get_persistent:
+                return
+            
+            persistent = await self._get_persistent()
+            
+            # Save emotional state
+            if self._get_emotional_engine:
+                emo = self._get_emotional_engine()
+                await persistent.save_emotional_state(emo)
+            
+            # Save relationship state
+            if self._get_relationship_manager:
+                rel = self._get_relationship_manager()
+                await persistent.save_relationship_state(rel)
+            
+            # Save conflict state
+            if self._get_conflict_engine:
+                conflict = self._get_conflict_engine()
+                await persistent.save_conflict_state(conflict)
+            
+            # Save world state
+            if self._get_world:
+                world = self._get_world()
+                await persistent.save_world_state(world)
+            
+            # Save role states
+            if self._get_role_manager:
+                role_manager = self._get_role_manager()
+                await role_manager.save_all(persistent)
+            
+            logger.debug("💾 Autosave completed")
+            
+        except Exception as e:
+            logger.error(f"Save state error: {e}")
+    
+    # =========================================================================
+    # PROACTIVE CHAT LOOP (NOVA)
     # =========================================================================
     
     async def _proactive_loop(self) -> None:
@@ -194,10 +408,7 @@ class VeloraWorker:
             await asyncio.sleep(30)
     
     async def _check_proactive(self) -> None:
-        """
-        Cek apakah Nova harus chat duluan untuk setiap user.
-        Menggunakan PromptBuilder untuk respons yang natural.
-        """
+        """Cek apakah Nova harus chat duluan untuk setiap user"""
         if not self._application or not self._user_ids:
             return
         
@@ -220,18 +431,6 @@ class VeloraWorker:
                 message = await orchestrator.check_proactive_for_user(user_id)
                 
                 if message:
-                    # Gunakan prompt builder untuk memperkaya pesan jika perlu
-                    if self._get_prompt_builder and random.random() < 0.3:
-                        # Kadang-kadang tambahkan scene untuk membuat lebih natural
-                        nova = self._get_role_manager().get_role('nova') if self._get_role_manager else None
-                        if nova and hasattr(nova, 'reality'):
-                            scene = nova.reality.scene_engine.get_body_language(
-                                'warm',
-                                max(nova.emotional.sayang / 100, 0.3)
-                            )
-                            if scene and scene not in message:
-                                message = f"{scene}\n\n{message}"
-                    
                     await self._application.bot.send_message(
                         chat_id=user_id,
                         text=message,
@@ -250,79 +449,223 @@ class VeloraWorker:
                 logger.error(f"Proactive check error for {user_id}: {e}")
     
     # =========================================================================
-    # NATURAL INTIMACY LOOP (BARU)
+    # AUTO SCENE LOOP (UNTUK PROVIDER)
     # =========================================================================
     
-    async def _natural_intimacy_loop(self) -> None:
-        """
-        Nova memulai intim secara natural (untuk level 10-12).
-        Dipanggil setiap 3 menit.
-        """
+    async def _auto_scene_loop(self) -> None:
+        """Auto scene untuk provider (pijat++, pelacur) setiap 15 detik"""
         while self.is_running:
             now = time.time()
-            elapsed = now - self.last_natural_intimacy_run
+            elapsed = now - self.last_auto_scene_run
             
-            if elapsed >= self.natural_intimacy_interval:
-                await self._check_natural_intimacy()
-                self.last_natural_intimacy_run = now
+            if elapsed >= self.auto_scene_interval:
+                await self._send_auto_scene()
+                self.last_auto_scene_run = now
             
-            await asyncio.sleep(60)
+            await asyncio.sleep(self.auto_scene_interval)
     
-    async def _check_natural_intimacy(self) -> None:
-        """
-        Cek apakah Nova harus memulai intim secara natural.
-        Hanya untuk level 10-12 dan dengan cooldown.
-        """
+    async def _send_auto_scene(self) -> None:
+        """Kirim auto scene untuk user yang sedang dalam sesi provider"""
         if not self._application or not self._user_ids:
             return
         
         for user_id in self._user_ids:
-            # Cek cooldown
-            last_intimacy = self._intimacy_cooldown.get(user_id, 0)
-            if time.time() - last_intimacy < self._intimacy_cooldown_seconds:
-                continue
-            
             try:
                 if not self._get_orchestrator:
                     continue
                 
                 orchestrator = await self._get_orchestrator()
-                message = await orchestrator.check_natural_intimacy(user_id)
+                message = await orchestrator.check_auto_scene(user_id)
                 
                 if message:
-                    # Gunakan prompt builder untuk memperkaya pesan
-                    if self._get_prompt_builder and self._get_role_manager:
-                        nova = self._get_role_manager().get_role('nova')
-                        if nova and hasattr(nova, 'reality'):
-                            # Tambahkan inner thought untuk level tinggi
-                            if nova.relationship.level >= 10:
-                                level = nova.relationship.level
-                                arousal = nova.emotional.arousal
-                                
-                                # Inner thought yang natural
-                                inner_thoughts = [
-                                    f"💭 *Aku ingin dia tahu seberapa besar aku menginginkannya. Tapi aku juga nggak mau terlihat terlalu berlebihan.*",
-                                    f"💭 *Degup jantungku mulai berdebar. Semoga dia merasakan hal yang sama.*",
-                                    f"💭 *Aku sudah lama menunggu momen ini. Semoga dia juga.*",
-                                    f"💭 *Ada sesuatu yang mengalir di dalam diriku. Hangat. Ingin lebih dekat.*"
-                                ]
-                                inner = random.choice(inner_thoughts)
-                                message = f"{message}\n\n{inner}"
-                    
                     await self._application.bot.send_message(
                         chat_id=user_id,
                         text=message,
                         parse_mode='Markdown'
                     )
-                    self._intimacy_cooldown[user_id] = time.time()
-                    self._natural_intimacy_sent += 1
-                    logger.info(f"💕 Natural intimacy message sent to {user_id} (level 10+)")
+                    self._auto_scenes_sent += 1
+                    logger.debug(f"🎬 Auto scene sent to {user_id}")
                     
             except Exception as e:
-                logger.error(f"Natural intimacy check error for {user_id}: {e}")
+                logger.error(f"Auto scene error for {user_id}: {e}")
     
     # =========================================================================
-    # GET STATS (UPDATED)
+    # BOOKING CHECK LOOP
+    # =========================================================================
+    
+    async def _booking_check_loop(self) -> None:
+        """Cek booking expiry setiap 1 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_booking_check_run
+            
+            if elapsed >= self.booking_check_interval:
+                await self._check_bookings()
+                self.last_booking_check_run = now
+            
+            await asyncio.sleep(60)
+    
+    async def _check_bookings(self) -> None:
+        """Cek apakah ada booking yang habis"""
+        if not self._application or not self._user_ids:
+            return
+        
+        for user_id in self._user_ids:
+            try:
+                if not self._get_orchestrator:
+                    continue
+                
+                orchestrator = await self._get_orchestrator()
+                message = await orchestrator.check_auto_scene(user_id)
+                
+                if message and ("habis" in message.lower() or "selesai" in message.lower()):
+                    # Booking habis, kirim notifikasi
+                    await self._application.bot.send_message(
+                        chat_id=user_id,
+                        text=f"⏰ *Booking Telah Berakhir*\n\n{message}",
+                        parse_mode='Markdown'
+                    )
+                    self._bookings_expired += 1
+                    logger.info(f"⏰ Booking expired for user {user_id}")
+                    
+            except Exception as e:
+                logger.error(f"Booking check error for {user_id}: {e}")
+    
+    # =========================================================================
+    # SESSION TIMEOUT LOOP
+    # =========================================================================
+    
+    async def _session_timeout_loop(self) -> None:
+        """Cek session timeout setiap 5 menit"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_session_timeout_run
+            
+            if elapsed >= self.session_timeout_interval:
+                await self._check_session_timeout()
+                self.last_session_timeout_run = now
+            
+            await asyncio.sleep(60)
+    
+    async def _check_session_timeout(self) -> None:
+        """Cek dan timeout session yang tidak aktif"""
+        if not self._application or not self._user_ids:
+            return
+        
+        now = time.time()
+        for user_id in self._user_ids:
+            last_active = self._last_activity.get(user_id, now)
+            if now - last_active > self._session_timeout_seconds:
+                try:
+                    if not self._get_orchestrator:
+                        continue
+                    
+                    orchestrator = await self._get_orchestrator()
+                    active_role = orchestrator.get_active_role(user_id)
+                    
+                    if active_role:
+                        orchestrator.clear_session(user_id)
+                        self._sessions_timeout += 1
+                        logger.info(f"⏰ Session timeout for user {user_id} (role: {active_role})")
+                        
+                        # Send notification
+                        await self._application.bot.send_message(
+                            chat_id=user_id,
+                            text="⏰ *Sesi berakhir karena tidak aktif terlalu lama.*\n\nKetik /nova untuk memulai lagi.",
+                            parse_mode='Markdown'
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Session timeout error for {user_id}: {e}")
+    
+    # =========================================================================
+    # PERSONALITY DRIFT LOOP
+    # =========================================================================
+    
+    async def _personality_loop(self) -> None:
+        """Update personality drift setiap 1 jam"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_personality_run
+            
+            if elapsed >= self.personality_interval:
+                await self._update_personality()
+                self.last_personality_run = now
+            
+            await asyncio.sleep(300)
+    
+    async def _update_personality(self) -> None:
+        """Update personality drift untuk semua role"""
+        try:
+            if not self._get_role_manager:
+                return
+            
+            role_manager = self._get_role_manager()
+            
+            for role_id, role in role_manager.roles.items():
+                if hasattr(role, 'reality') and hasattr(role.reality, 'personality_drift'):
+                    # Personality drift already handled in update_from_message
+                    # Just log current state
+                    desc = role.reality.personality_drift.get_description()
+                    if desc:
+                        logger.debug(f"🧠 {role_id} personality: {desc}")
+            
+        except Exception as e:
+            logger.error(f"Personality update error: {e}")
+    
+    # =========================================================================
+    # AUTO BACKUP LOOP
+    # =========================================================================
+    
+    async def _backup_loop(self) -> None:
+        """Auto backup database setiap 6 jam"""
+        while self.is_running:
+            now = time.time()
+            elapsed = now - self.last_backup_run
+            
+            if elapsed >= self.backup_interval:
+                await self._auto_backup()
+                self.last_backup_run = now
+                self._backups_created += 1
+            
+            await asyncio.sleep(3600)
+    
+    async def _auto_backup(self) -> None:
+        """Auto backup database"""
+        try:
+            from pathlib import Path
+            from datetime import datetime
+            
+            if not self._get_persistent:
+                return
+            
+            persistent = await self._get_persistent()
+            db_path = persistent.db_path
+            
+            backup_dir = Path("data/backups")
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            if db_path.exists():
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = backup_dir / f"velora_auto_{timestamp}.db"
+                
+                await persistent.create_backup(backup_path)
+                
+                # Hapus backup auto yang lebih dari 7 hari
+                import shutil
+                for b in backup_dir.glob("velora_auto_*.db"):
+                    age = time.time() - b.stat().st_mtime
+                    if age > 7 * 24 * 3600:
+                        b.unlink()
+                        logger.info(f"🗑️ Deleted old backup: {b.name}")
+                
+                logger.info(f"💾 Auto backup saved: {backup_path.name}")
+                
+        except Exception as e:
+            logger.error(f"Auto backup error: {e}")
+    
+    # =========================================================================
+    # UTILITY
     # =========================================================================
     
     def get_stats(self) -> Dict:
@@ -341,7 +684,6 @@ class VeloraWorker:
             'bookings_expired': self._bookings_expired,
             'sessions_timeout': self._sessions_timeout,
             'backups_created': self._backups_created,
-            'natural_intimacy_sent': self._natural_intimacy_sent,  # BARU
             'last_rindu': self.last_rindu_run,
             'last_conflict': self.last_conflict_run,
             'last_mood': self.last_mood_run,
@@ -349,8 +691,7 @@ class VeloraWorker:
             'last_save': self.last_save_run,
             'last_proactive': self.last_proactive_run,
             'last_auto_scene': self.last_auto_scene_run,
-            'last_backup': self.last_backup_run,
-            'last_natural_intimacy': self.last_natural_intimacy_run  # BARU
+            'last_backup': self.last_backup_run
         }
     
     def format_status(self) -> str:
@@ -386,7 +727,6 @@ class VeloraWorker:
 ║   Bookings Expired: {stats['bookings_expired']}
 ║   Sessions Timeout: {stats['sessions_timeout']}
 ║   Backups Created: {stats['backups_created']}
-║   Natural Intimacy Sent: {stats['natural_intimacy_sent']}  # BARU
 ╠══════════════════════════════════════════════════════════════╣
 ║ LAST RUN:
 ║   Rindu: {format_time(stats['last_rindu'])}
@@ -397,11 +737,22 @@ class VeloraWorker:
 ║   Proactive: {format_time(stats['last_proactive'])}
 ║   Auto Scene: {format_time(stats['last_auto_scene'])}
 ║   Backup: {format_time(stats['last_backup'])}
-║   Natural Intimacy: {format_time(stats['last_natural_intimacy'])}  # BARU
 ╚══════════════════════════════════════════════════════════════╝
 """
     
-    # ... (method lain tetap sama)
+    def reset_stats(self) -> None:
+        """Reset statistik"""
+        self._rindu_updates = 0
+        self._conflict_decays = 0
+        self._mood_recoveries = 0
+        self._drama_decays = 0
+        self._auto_saves = 0
+        self._proactive_sent = 0
+        self._auto_scenes_sent = 0
+        self._bookings_expired = 0
+        self._sessions_timeout = 0
+        self._backups_created = 0
+        logger.info("📊 Worker stats reset")
 
 
 # =============================================================================
