@@ -2,9 +2,6 @@
 VELORA - Role Manager
 Mengelola semua role dalam satu sistem terpusat.
 Semua role terdaftar dan bisa diakses melalui manager ini.
-
-NOTE: generate_response() sekarang ada di orchestrator, bukan di sini.
-RoleManager hanya untuk state management dan routing.
 """
 
 import time
@@ -32,22 +29,15 @@ class RoleManager:
     """
     Manager untuk semua role.
     Menyimpan state setiap role, terpisah dari Nova.
-    
-    NOTE: AI response generation sekarang ada di orchestrator.
-    RoleManager hanya untuk:
-    - State management
-    - Role switching
-    - Conversation history
-    - Provider-specific command handling
     """
     
     def __init__(self):
         self.roles: Dict[str, BaseRole] = {}
         self.active_role: Optional[str] = None
         self.user_active_role: Dict[int, str] = {}  # user_id -> role_id
+        self._ai_client = None
         self._memory_manager = None
         self._world = None
-        self._prompt_builder = None  # Akan diinisialisasi nanti
         
         # Inisialisasi semua role
         self._init_roles()
@@ -82,11 +72,7 @@ class RoleManager:
         """Initialize semua role dengan memory manager dan world"""
         self._memory_manager = memory_manager
         self._world = world
-        
-        # Import prompt builder di sini untuk hindari circular import
-        from bot.prompt import get_prompt_builder
-        self._prompt_builder = get_prompt_builder()
-        
+    
         for role_id, role in self.roles.items():
             role.initialize(memory_manager)
             # Register ke world - pastikan awareness_level adalah enum
@@ -98,8 +84,8 @@ class RoleManager:
                 else:
                     awareness_enum = role.awareness_level
                 world.register_role(role_id, awareness_enum)
-        
-        logger.info(f"🔗 All {len(self.roles)} roles connected to MemoryManager, World, and PromptBuilder")
+    
+        logger.info(f"🔗 All {len(self.roles)} roles connected to MemoryManager and World")
     
     # =========================================================================
     # ROLE ACCESS
@@ -126,7 +112,7 @@ class RoleManager:
                 "nickname": role.nickname,
                 "role_type": role.role_type,
                 "level": role.relationship.level if hasattr(role, 'relationship') else 1,
-                "phase": role.relationship.phase.value if hasattr(role, 'relationship') and hasattr(role.relationship.phase, 'value') else 'stranger',
+                "phase": role.relationship.phase.value if hasattr(role, 'relationship') else 'stranger',
                 "panggilan": role.panggilan,
                 "hubungan": role.hubungan_dengan_nova,
                 "hijab": hijab_on,
@@ -144,20 +130,20 @@ class RoleManager:
         """Bersihkan semua karakter Markdown yang bermasalah"""
         if not text:
             return ""
-        
+    
         # Hapus semua karakter Markdown yang bermasalah
         text = re.sub(r'[*_`]', '', text)
-        
+    
         # Ganti karakter kurung
         text = text.replace('[', '(').replace(']', ')')
         text = text.replace('(', '').replace(')', '')
-        
+    
         # Hapus karakter kontrol
         text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
-        
+    
         # Hapus multiple spaces
         text = re.sub(r'\s+', ' ', text)
-        
+    
         return text.strip()
     
     # =========================================================================
@@ -171,13 +157,13 @@ class RoleManager:
         """
         if role_id not in self.roles:
             return f"Role '{role_id}' tidak ditemukan. Pilih dari: {', '.join(self.roles.keys())}"
-        
+    
         self.active_role = role_id
         if user_id:
             self.user_active_role[user_id] = role_id
-        
+    
         role = self.roles[role_id]
-        
+    
         try:
             # Reset status jika perlu (kecuali sedang dalam layanan)
             if hasattr(role, 'status'):
@@ -191,22 +177,25 @@ Status: {role.status.value.upper()}
 Ketik **/status** untuk melihat detail layanan.
 Ketik **/batal** untuk membatalkan dan kembali ke Nova.
 """
-            
+        
             greeting = role.get_greeting()
             style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
             phase = role.relationship.phase if hasattr(role, 'relationship') else None
-            level = role.relationship.level if hasattr(role, 'relationship') else 1
-            
+        
+            # ========== PEMBERSIHAN MARKDOWN ==========
             # Bersihkan greeting dari semua karakter Markdown
+            greeting = role.get_greeting()
             greeting_clean = self._clean_markdown(greeting)
+
             hubungan_clean = self._clean_markdown(role.hubungan_dengan_nova)
-            
+            # ========================================
+        
             # Format respons berdasarkan tipe role
             if role.role_type in ['pijat_plus_plus', 'pelacur']:
                 base_price = getattr(role, 'base_price', 0)
                 min_price = getattr(role, 'min_price', 0)
                 boob_size = getattr(role, 'boob_size', '-')
-                
+            
                 return f"""
 💆‍♀️ **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
@@ -225,11 +214,11 @@ Ketik **/batal** untuk kembali ke Nova.
                 return f"""
 💕 **{role.name} ({role.nickname})** - {role.role_type.upper()}
 
-{hubungan_clean}
+{role.hubungan_dengan_nova}
 
 {greeting_clean}
 
-📊 Level: {level}/12 | Fase: {phase.value.upper() if phase else '?'}
+📊 Level: {role.relationship.level}/12 | Fase: {role.relationship.phase.value.upper() if phase else '?'}
 🎭 Style: {style.value.upper() if style else '?'}
 💕 Sayang: {role.emotional.sayang:.0f}% | Rindu: {role.emotional.rindu:.0f}%
 
@@ -258,18 +247,22 @@ Ketik **/batal** untuk kembali ke Nova.
             del self.user_active_role[user_id]
     
     # =========================================================================
-    # MESSAGE PROCESSING (COMMAND HANDLING ONLY)
+    # LAZY IMPORT UNTUK HINDARI CIRCULAR IMPORT
+    # =========================================================================
+    
+    async def _get_orchestrator(self):
+        """Lazy import untuk menghindari circular import"""
+        from core.orchestrator import get_orchestrator
+        return await get_orchestrator()
+    
+    # =========================================================================
+    # MESSAGE PROCESSING (FULL AI INTEGRATION)
     # =========================================================================
     
     async def process_message(self, role_id: str, message: str, user_id: int = None) -> str:
         """
         Proses pesan untuk role tertentu.
-        
-        NOTE: Method ini hanya untuk:
-        - Command handling (deal, nego, mulai, lanjut, dll)
-        - Provider-specific business logic
-        
-        AI RESPONSE GENERATION SEKARANG ADA DI ORCHESTRATOR!
+        Method utama untuk interaksi dengan AI.
         """
         role = self.get_role(role_id)
         if not role:
@@ -283,7 +276,7 @@ Ketik **/batal** untuk kembali ke Nova.
             # Deal / Nego
             if msg_lower == "/deal":
                 if hasattr(role, 'confirm_booking'):
-                    return role.confirm_booking(getattr(role, 'min_price', 0))
+                    return role.confirm_booking(role.min_price)
                 return "Role ini tidak memiliki sistem booking."
             
             elif msg_lower.startswith("/nego"):
@@ -344,11 +337,11 @@ Ketik **/batal** untuk kembali ke Nova.
             
             elif msg_lower == "/deal_bj":
                 if hasattr(role, 'confirm_extra_service'):
-                    return role.confirm_extra_service("bj", getattr(role, 'bj_price_final', 0))
+                    return role.confirm_extra_service("bj", role.bj_price_final)
             
             elif msg_lower == "/deal_sex":
                 if hasattr(role, 'confirm_extra_service'):
-                    return role.confirm_extra_service("sex", getattr(role, 'sex_price_final', 0))
+                    return role.confirm_extra_service("sex", role.sex_price_final)
         
         # ========== INTIMATE PHASE COMMANDS (untuk pelacur) ==========
         if hasattr(role, 'session_phase') and role.session_phase == "intimate_phase":
@@ -373,17 +366,37 @@ Ketik **/batal** untuk kembali ke Nova.
         # Cek level up
         if update_result.get('level_up'):
             level_baru = update_result.get('new_level', role.relationship.level)
-            notif = f"✨ Level naik ke {level_baru}/12! ✨\n\n"
+            notif = f"✨ Level naik ke {level_baru}/12!** ✨\n\n"
         else:
             notif = ""
         
-        # Save conversation (respons akan diisi nanti oleh orchestrator)
+        # Save conversation
         role.add_conversation(message, "")
         
-        # ========== RETURN NOTIF SAJA (RESPONSE DARI ORCHESTRATOR) ==========
-        # NOTE: AI response akan di-generate di orchestrator
-        # Method ini hanya return notif level up jika ada
-        return notif
+        # ========== GENERATE AI RESPONSE ==========
+        try:
+            # Dapatkan context dari memory jika ada
+            context = None
+            if self._memory_manager:
+                context = self._memory_manager.get_context_for_role(role_id)
+            
+            # Panggil AI untuk generate response
+            response = await role.generate_response(message, context)
+
+            # ========== CLEAN MARKDOWN ==========
+            safe_response = self._clean_markdown(response)
+
+            # Save response ke conversation
+            if role.conversations:
+                role.conversations[-1]['role'] = response[:200]
+            
+            return notif + safe_response
+            
+        except Exception as e:
+            logger.error(f"Error generating response for {role_id}: {e}", exc_info=True)
+            # Fallback ke greeting yang sudah dibersihkan
+            safe_greeting = self._clean_markdown(role.get_greeting())
+            return notif + safe_greeting
     
     # =========================================================================
     # AUTO SCENE MANAGEMENT
@@ -400,11 +413,11 @@ Ketik **/batal** untuk kembali ke Nova.
         
         # Cek auto scene untuk provider (pelacur, pijat++)
         if hasattr(role, 'get_phase_auto_scene'):
-            return await role.get_phase_auto_scene()
+            return role.get_phase_auto_scene()
         
         # Cek auto scene untuk service provider base
         if hasattr(role, 'get_next_auto_scene'):
-            return await role.get_next_auto_scene()
+            return role.get_next_auto_scene()
         
         return None
     
