@@ -413,11 +413,11 @@ Ketik **/batal** untuk kembali ke Nova.
         
         # Cek auto scene untuk provider (pelacur, pijat++)
         if hasattr(role, 'get_phase_auto_scene'):
-            return role.get_phase_auto_scene()
+            return await role.get_phase_auto_scene()
         
         # Cek auto scene untuk service provider base
         if hasattr(role, 'get_next_auto_scene'):
-            return role.get_next_auto_scene()
+            return await role.get_next_auto_scene()
         
         return None
     
