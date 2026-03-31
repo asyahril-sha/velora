@@ -112,7 +112,7 @@ class RoleManager:
                 "nickname": role.nickname,
                 "role_type": role.role_type,
                 "level": role.relationship.level if hasattr(role, 'relationship') else 1,
-                "phase": role.relationship.phase.value if hasattr(role, 'relationship') else 'stranger',
+                "phase": role.relationship.phase.value if hasattr(role, 'relationship') and hasattr(role.relationship.phase, 'value') else 'stranger',
                 "panggilan": role.panggilan,
                 "hubungan": role.hubungan_dengan_nova,
                 "hijab": hijab_on,
