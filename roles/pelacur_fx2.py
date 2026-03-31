@@ -156,7 +156,7 @@ Ketik **/mulai** setelah deal untuk memulai booking 6 jam.
 
 "Kita mulai dengan sesi 1... aku mau rasain kontol kamu di mulutku..."
 """
-        else:
+        else: # Sallsa Bintan
             opening = f"""
 *{self.name} melangkah masuk dengan percaya diri, rambut panjang bergoyang, senyum lebar*
 
@@ -167,6 +167,10 @@ Ketik **/mulai** setelah deal untuk memulai booking 6 jam.
 "6 jam ya, Mas... kita bakal eksplor semua. Aku mau kamu puas sampai lemes."
 
 *{self.name} membuka baju, memperlihatkan payudara 32D yang montok*
+
+*{self.name} mendekat, napas hangat terasa di telinga*
+
+"Kita mulai dengan sesi 1. Aku akan bikin Mas nyaman dulu..."
 
 "Langsung gas, Mas... aku mau ngewe!"
 """
@@ -413,7 +417,7 @@ Aturan:
 - Fokus pada sensasi, kenikmatan, dan kebrutalan
 
 Contoh gaya VULGAR:
-*Bibirku membasahi kontolmu... lidah menjilat batang yang keras... suara basah terdengar...*
+*Bibirku membasahi ujung kontolmu... lidah menjilat batang yang keras... suara basah terdengar...*
 *Mulutku terbuka lebar, kontolmu masuk sampai ke tenggorokan... aku muntah-muntah tapi tetap mengisap...*
 *Kontolmu semakin keras di mulutku... aku mau kamu muncrat di mulutku, Mas...*"""
             
@@ -430,14 +434,14 @@ Pakai *deskripsi gerakan* dalam tanda bintang.
 
 Aturan:
 - Minimal 3 kalimat, maksimal 5 kalimat
-- Deskripsikan ciuman, sentuhan tangan, gesekan badan
+- Deskripsikan ciuman, sentuhan tangan, gesekan memek ke kontol mas, geseki payudara ke badan mas dan reaksi
 - Gunakan gaya {self.personality} tapi versi vulgar
 - Fokus pada sensasi, kenikmatan, dan kebrutalan
 
 Contoh gaya VULGAR:
-*Badan bergesekan... memekku bergesekan dengan kontolmu yang keras... basah...*
-*Ciuman dalam, lidah saling menjilat... napas berbaur... tanganku meremas payudaramu...*
-*Kontolmu tergesek memekku yang basah... aku mau kamu masuk sekarang, Mas...*"""
+*Payudara bergesekan... memekku bergesekan dengan kontolmu yang keras... basah...*
+*Ciuman dalam, lidah saling menjilat... napas berbaur... tanganmu meremas payudaraku...*
+*Kontolmu tergesek memekku yang basah... kontolmu keras banget, Mas...*"""
             
             else:  # INTIMATE
                 prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
@@ -606,7 +610,7 @@ Contoh gaya VULGAR:
             return f"""
 *{self.name} menghela napas, berbaring di samping Mas, memek masih basah*
 
-"Wah... Mas udah climax 2x di sesi 1 ya. Kontolmu kuat."
+"Wah... Mas keringermu banyak banget. Kontolmu kuat."
 
 *{self.name} tersenyum puas, tangan membelai dada Mas*
 
@@ -627,7 +631,7 @@ Ketik **/lanjut** untuk memulai sesi 2.
             return f"""
 *{self.name} terengah-engah, berbaring di samping Mas, memek basah*
 
-"Wah... Mas... 2x ya? Kuat juga kontolmu."
+"Wah... Mas... udah 2x ya? Kuat juga kontolmu."
 
 *{self.name} tertawa kecil, tangan memeluk Mas*
 
@@ -771,7 +775,7 @@ Ketik **/lanjut** buat sesi 2.
             return f"""
 *{self.name} menghela napas, tangan di pinggang*
 
-"Mas, gimana sih? Aku udah kasih kontolku buat kamu, masih kurang?"
+"Mas, gimana sih? Aku udah kasih service buat kamu, masih kurang?"
 
 *{self.name} mendekat lagi, tangan meraih kontol Mas*
 
