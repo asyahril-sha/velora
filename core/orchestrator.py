@@ -358,7 +358,7 @@ class RoleOrchestrator:
         if routing_result != RoutingResult.TO_PROVIDER:
             style = role.emotional.get_current_style()
             scene = reality.scene_engine.get_body_language(
-                style.value if style else "neutral",
+                style.value if hasattr(style, 'value') else (style if style else "neutral"),
                 emotion_intensity
             )
             if scene and scene not in response and not response.startswith('*'):
