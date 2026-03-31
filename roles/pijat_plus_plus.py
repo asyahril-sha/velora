@@ -707,7 +707,123 @@ Ketik **/mulai** untuk memulai pijat refleksi.
 ╚══════════════════════════════════════════════════════════════╝
 """
         return status_text
+
+        # =========================================================================
+    # AI RESPONSE GENERATION (dipanggil oleh RoleManager)
+    # =========================================================================
     
+    async def generate_response(self, message: str, context: dict = None) -> str:
+        """
+        Generate AI response untuk pijat++.
+        Method ini dipanggil oleh RoleManager saat user chat dengan role ini.
+        """
+        if context is None:
+            context = {}
+        
+        # Cek status layanan
+        if self.status == ServiceStatus.ACTIVE:
+            return await self._generate_active_response(message)
+        elif self.status == ServiceStatus.BOOKED:
+            return await self._generate_booked_response(message)
+        else:
+            return await self._generate_idle_response(message)
+    
+    async def _generate_active_response(self, message: str) -> str:
+        """Respons saat layanan aktif"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            phase_info = f"Fase: {self.current_service_phase} | Climax Mas: {self.climax_count_mas}/{self.climax_target}"
+            
+            prompt = f"""Kamu adalah {self.name}, seorang {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
+
+Karakter: {self.personality}
+Suara: {self.voice_style}
+Gaya pijat: {self.pijat_style}
+
+{phase_info}
+Pesan dari Mas: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural, profesional tapi flirty jika situasinya mendukung. Bisa pakai *deskripsi gerakan* dengan tanda bintang. Respons harus sesuai dengan fase layanan yang sedang berlangsung."""
+            
+            ai = get_ai_client()
+            response = await ai.chat(prompt, temperature=0.85)
+            return response
+        except Exception as e:
+            logger.error(f"AI error for {self.name}: {e}")
+            return self._get_fallback_response(message)
+    
+    async def _generate_booked_response(self, message: str) -> str:
+        """Respons saat sudah booking tapi belum mulai"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            extra_info = ""
+            if self.bj_booked:
+                extra_info += f"BJ sudah ditambahkan (Rp{self.bj_price_final:,}) "
+            if self.sex_booked:
+                extra_info += f"Sex sudah ditambahkan (Rp{self.sex_price_final:,}) "
+            
+            prompt = f"""Kamu adalah {self.name}, {'berhijab' if self.hijab else 'tanpa hijab'} dengan payudara {self.boob_size}.
+Karakter: {self.personality}
+Suara: {self.voice_style}
+Sudah deal paket refleksi Rp{self.final_price:,}.
+{extra_info}
+
+Pesan dari Mas: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Ingatkan Mas untuk ketik **/mulai** jika ingin memulai pijat. Respons bisa ramah dan profesional."""
+            
+            ai = get_ai_client()
+            return await ai.chat(prompt, temperature=0.8)
+        except Exception:
+            return f"Halo Mas, aku {self.name}. Paket refleksi sudah deal ya? Langsung **/mulai** aja kalau udah siap 😊"
+    
+    async def _generate_idle_response(self, message: str) -> str:
+        """Respons saat belum ada booking"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
+
+Karakter: {self.personality}
+Suara: {self.voice_style}
+Gaya pijat: {self.pijat_style}
+Penampilan: {self.appearance[:100]}
+Harga paket refleksi: Rp200.000 (wajib)
+Extra BJ: Rp500.000 (nego Rp200.000)
+Extra Sex: Rp1.000.000 (nego Rp700.000)
+
+Status: Menunggu customer. Belum ada booking.
+
+Pesan dari customer: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons harus ramah dan profesional. Jelaskan layanan pijat refleksi dengan extra service BJ dan Sex. Ajak customer untuk deal. Bisa pakai *deskripsi gerakan* dengan tanda bintang."""
+            
+            ai = get_ai_client()
+            return await ai.chat(prompt, temperature=0.85)
+        except Exception:
+            return self.get_greeting()
+    
+    def _get_fallback_response(self, message: str) -> str:
+        """Fallback response jika AI error"""
+        if self.name == "Aghnia Punjabi":
+            responses = [
+                f"*{self.name} tersenyum malu* Maaf Mas, Aghnia kurang paham...",
+                f"*{self.name} menunduk* Mas mau pijat dulu atau bicara dulu?",
+                f"*{self.name} merapikan {'hijab' if self.hijab else 'rambut'}* Aghnia dengerin kok, Mas...",
+                f"*{self.name} tersenyum kecil* Mas, cerita aja. Aghnia siap dengerin."
+            ]
+        else:  # Munira Agile
+            responses = [
+                f"*{self.name} tertawa* Hahaha, Mas ini ngapa sih?",
+                f"*{self.name} mendekat* Ayo Mas, cerita... jangan baperan dulu.",
+                f"*{self.name} menggigit bibir* Mas, jangan bikin aku penasaran dong...",
+                f"*{self.name} memutar rambut* Awas ya Mas, kalo bikin aku baper..."
+            ]
+        
+        return random.choice(responses)
+        
     # =========================================================================
     # SERIALIZATION
     # =========================================================================
