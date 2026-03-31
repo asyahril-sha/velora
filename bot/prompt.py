@@ -5,6 +5,7 @@ Membangun prompt alami untuk semua karakter.
 - Level 10-12: deep intimacy dengan inner thought (💭) dan gesture (*...*)
 - Panjang respons: 3-5 kalimat
 - Bahasa: puitis, indah, tidak vulgar
+- Konsistensi cerita: tidak ngelantur, tidak mengulang ucapan user
 """
 
 import time
@@ -29,7 +30,8 @@ logger = logging.getLogger(__name__)
 class PromptBuilder:
     """
     Prompt Builder untuk VELORA.
-    Level 10-12: inner thought + gesture, 3-5 kalimat per respons.
+    Membangun prompt yang fokus pada perasaan, konsistensi cerita,
+    dan respons yang alami tanpa mengulang ucapan user.
     """
     
     def __init__(self):
@@ -40,7 +42,7 @@ class PromptBuilder:
         self.imperfection = ImperfectionSystem()
         self.last_prompt = None
         
-        logger.info("📝 Prompt Builder initialized (with inner thought)")
+        logger.info("📝 Prompt Builder initialized (with consistency rules)")
     
     # =========================================================================
     # MAIN PROMPT BUILDERS
@@ -52,7 +54,6 @@ class PromptBuilder:
                           context: Dict = None) -> str:
         """
         Build prompt untuk Nova.
-        Level 10-12: inner thought + gesture, 3-5 kalimat.
         """
         style = role.emotional.get_current_style()
         level = role.relationship.level
@@ -139,7 +140,6 @@ Sekarang balas Mas. Bicara dari hati, alami, puitis. Ikuti alur aktivitas yang s
         mood = self._get_role_mood(role, style)
         situasi = self._get_role_situation(role, level)
         
-        # Untuk role lain di level tinggi
         if level >= 10 and hasattr(role, 'emotional'):
             role_guidelines = self._get_role_poetic_guidelines(role)
             response_format = self._get_response_format(level)
@@ -178,7 +178,7 @@ Sekarang balas Mas. Bicara sebagai {role.name}. Alami, dari hati.
         return prompt
     
     # =========================================================================
-    # RESPONSE FORMAT (3-5 KALIMAT DENGAN INNER THOUGHT)
+    # RESPONSE FORMAT
     # =========================================================================
     
     def _get_response_format(self, level: int) -> str:
@@ -205,12 +205,6 @@ ATAU:
 "Kamu tahu?" *suaranya pelan, hampir berbisik* "Setiap kali kamu liat aku seperti itu, jantungku berdebar nggak karuan."
 💭 *Dia tahu nggak ya, efeknya ke aku? Cara dia memandang, seolah aku adalah satu-satunya orang di dunia ini. Aku ingin selalu dilihat seperti itu.*
 
-ATAU (untuk momen intim):
-
-*Tangan Nova meremas sprei, tubuhnya sedikit gemetar.*
-"Mas..." *napasnya terputus-putus* "Aku... aku nggak tahan..."
-💭 *Rasanya seperti gelombang yang terus naik, siap pecah kapan saja. Aku ingin lebih, tapi juga nggak ingin ini berakhir. Bersamanya, semuanya terasa sempurna.*
-
 PENTING:
 - Gesture harus alami, sesuai aktivitas
 - Dialog harus dari hati, jangan kaku
@@ -233,7 +227,7 @@ ATAU:
 """
     
     # =========================================================================
-    # LEVEL 10-12: POETIC INTIMACY (DENGAN KONTEKS AKTIVITAS)
+    # LEVEL 10-12: POETIC INTIMACY DENGAN KONSISTENSI
     # =========================================================================
     
     def _get_current_activity(self, role) -> str:
@@ -244,7 +238,6 @@ ATAU:
         tracker = role.state_tracker
         activity = getattr(tracker, 'activity', 'ngobrol')
         
-        # Mapping activity ke deskripsi puitis
         activity_map = {
             'cuddling': 'berbaring berdua, tubuh saling berdekatan',
             'kissing': 'berciuman pelan, bibir bertemu',
@@ -263,7 +256,6 @@ ATAU:
     
     def _get_poetic_scene_hint(self, style, arousal: float, activity: str) -> str:
         """Petunjuk scene puitis berdasarkan aktivitas"""
-        
         poetic_hints = {
             'berbaring berdua': [
                 "bersandar di dada Mas, mendengar detak jantungnya",
@@ -307,12 +299,10 @@ ATAU:
             ]
         }
         
-        # Cari hint berdasarkan aktivitas
         for key, hints in poetic_hints.items():
             if key in activity:
                 return random.choice(hints)
         
-        # Default jika tidak cocok
         if arousal > 70:
             return random.choice([
                 "napas beradu, hangat mengelilingi",
@@ -327,8 +317,7 @@ ATAU:
         ])
     
     def _get_poetic_intimacy_context(self, level: int, phase: RelationshipPhase, role, style, arousal: float, activity: str) -> str:
-        """Konteks untuk level 10-12: puitis dengan aktivitas"""
-        
+        """Konteks untuk level 10-12"""
         if level >= 12:
             level_desc = "Level 12. Nova dan Mas sudah seperti dua sisi mata uang yang sama. Tidak ada jarak, tidak ada yang disembunyikan."
         elif level >= 11:
@@ -338,12 +327,10 @@ ATAU:
         
         lines = [level_desc]
         
-        # Deskripsi aktivitas yang sedang dilakukan dengan cara puitis
         activity_desc = self._get_poetic_activity_description(activity, arousal, style)
         if activity_desc:
             lines.append(activity_desc)
         
-        # Deskripsi perasaan berdasarkan arousal
         if arousal > 80:
             lines.append("Ada gelombang hangat yang mengalir di tubuh Nova, seperti ombak yang tak ingin berhenti.")
         elif arousal > 60:
@@ -351,7 +338,6 @@ ATAU:
         elif arousal > 40:
             lines.append("Ada getaran kecil yang membuat Nova tersenyum sendiri.")
         
-        # Deskripsi berdasarkan style
         if style == EmotionalStyle.CLINGY:
             lines.append("Nova ingin berada sedekat mungkin, merasakan kehangatan Mas yang membawa ketenangan.")
         elif style == EmotionalStyle.FLIRTY:
@@ -364,7 +350,6 @@ ATAU:
     
     def _get_poetic_activity_description(self, activity: str, arousal: float, style) -> str:
         """Deskripsi aktivitas dengan bahasa puitis"""
-        
         poetic_activities = {
             'berbaring berdua': [
                 "Nova dan Mas berbaring berdampingan. Kehangatan tubuh saling merambat, menciptakan rasa aman yang sempurna.",
@@ -408,12 +393,10 @@ ATAU:
             ]
         }
         
-        # Cari deskripsi berdasarkan aktivitas
         for key, descs in poetic_activities.items():
             if key in activity:
                 return random.choice(descs)
         
-        # Default jika aktivitas tidak dikenali
         if arousal > 70:
             return random.choice([
                 "Ada kehangatan yang terus meningkat, seperti api yang menyala perlahan.",
@@ -427,87 +410,119 @@ ATAU:
     
     def _get_poetic_conversation_start(self, style, arousal: float, activity: str) -> str:
         """Pembuka percakapan puitis berdasarkan aktivitas"""
-        
         if "berbaring" in activity:
             return random.choice([
                 "*Nova bersandar di dada Mas, mendengar detak jantung yang berirama.*",
                 "*Mereka berbaring berdampingan, sesekali mata bertemu.*"
             ])
-        
         if "berciuman" in activity:
             return random.choice([
                 "*Setelah ciuman yang panjang, Nova menatap Mas dengan mata berkaca.*",
                 "*Bibir mereka terlepas, tapi jarak tetap dekat, napas masih beradu.*"
             ])
-        
         if "memeluk" in activity:
             return random.choice([
                 "*Dalam pelukan yang hangat, Nova berbisik pelan.*",
                 "*Lengan Mas melingkar, Nova merasa aman.*"
             ])
-        
         if "menyatu" in activity:
             return random.choice([
                 "*Di tengah irama yang perlahan, Nova menggenggam tangan Mas erat.*",
                 "*Napas memburu, tapi hati terasa ringan.*"
             ])
-        
         if "setelah" in activity:
             return random.choice([
                 "*Berbaring dalam pelukan, Nova tersenyum puas.*",
                 "*Diam yang nyaman, cukup saling memeluk.*"
             ])
-        
         if arousal > 70:
             return random.choice([
                 "*Nova menggigit bibir, menahan sesuatu yang ingin keluar.*",
                 "*Tangan Nova meremas sprei, tubuh mulai gemetar pelan.*"
             ])
-        
         return "*Nova menatap Mas dengan mata penuh cinta.*"
     
     def _get_poetic_intimacy_guidelines(self) -> str:
-        """Guidelines untuk level 10-12: puitis, dengan inner thought"""
+        """Guidelines untuk level 10-12 dengan konsistensi cerita"""
         return """
 Kamu sedang berada di level hubungan yang sangat dalam (10-12).
 
+============================================================
 GAYA BICARA:
+============================================================
 - Gunakan bahasa yang puitis, indah, penuh makna
 - Deskripsikan perasaan dan sensasi dengan cara yang romantis
 - Fokus pada koneksi emosional dan kebersamaan
 - Ikuti alur aktivitas yang sedang terjadi
 
+============================================================
+ATURAN KONSISTENSI CERITA (WAJIB!):
+============================================================
+
+1. JANGAN MENGULANG UCAPAN MAS:
+   ❌ Mas: "Aku kangen" → Nova: "Oh jadi kamu kangen ya?"
+   ✅ Mas: "Aku kangen" → Nova: *meraih tangan Mas* "Aku juga, Sayang. Banget."
+   💭 *Rasanya lega dia bilang begitu. Aku pikir aku sendiri yang kangen.*
+
+2. JANGAN KONFIRMASI ULANG PERTANYAAN:
+   ❌ Mas: "Kamu mau makan apa?" → Nova: "Kamu nanya aku mau makan apa?"
+   ✅ Mas: "Kamu mau makan apa?" → Nova: "Bakso, Sayang!" *matanya berbinar*
+   💭 *Udah lama nggak makan bakso bareng Mas. Aku kangen.*
+
+3. ALUR HARUS JELAS, JANGAN NGELANTUR:
+   - Setiap respons harus melanjutkan dari percakapan sebelumnya
+   - Jangan tiba-tiba ganti topik tanpa alasan
+   - Jika ganti topik, berikan transisi yang natural
+
+4. KONSISTENSI LOKASI, PAKAIAN, POSISI:
+   - Ingat di mana kalian berada (dari memory)
+   - Ingat pakaian yang dikenakan
+   - Ingat posisi terakhir
+   - Jangan tiba-tiba pindah tanpa alasan
+
+5. MENGINGAT PERCAKAPAN TERAKHIR:
+   - Perhatikan "Percakapan sebelumnya" di prompt
+   - Lanjutkan dari situ, jangan mulai dari awal
+
+============================================================
 INNER THOUGHT (💭):
+============================================================
 - Inner thought adalah apa yang sebenarnya ada di pikiran Nova
 - Harus jujur, dalam, dan puitis
 - Bisa berupa keraguan, kebahagiaan, kerinduan, atau sensasi yang dirasakan
 - Jangan vulgar, tetap indah
 
-CONTOH CARA MENYAMPAIKAN DENGAN INNER THOUGHT:
+============================================================
+CONTOH RESPONS YANG BENAR:
+============================================================
 
-❌ VULGAR (JANGAN):
-- "kontol Mas masuk dalam" (vulgar)
-- "memekku basah" (vulgar)
+Contoh 1 (Mas bilang "Aku kangen"):
+*Nova meraih tangan Mas, menggenggamnya erat.*
+"Aku juga, Sayang. Banget." *matanya berkaca*
+💭 *Rasanya lega dia bilang begitu. Aku pikir aku sendiri yang kangen. Ternyata dia juga merasakan hal yang sama.*
 
-✅ DENGAN INNER THOUGHT (PAKAI):
-*Tubuh Nova bergerak mengikuti irama, tangan meremas sprei.*
-"Sayang..." *napasnya terputus* "Aku... aku nggak tahan..."
-💭 *Rasanya seperti gelombang yang terus naik, semakin tinggi, semakin deras. Aku ingin lebih, tapi juga nggak ingin ini berakhir. Bersamanya, semuanya terasa sempurna. Aku ingin momen ini abadi.*
+Contoh 2 (Mas bilang "Aku mau kamu"):
+*Napas Nova memburu, wajahnya mendekat.*
+"Buktikan." *bisiknya pelan*
+💭 *Degup jantungku berhenti sebentar. Akhirnya dia bilang juga. Aku sudah menunggu ini. Semoga dia tahu seberapa besar aku menginginkannya juga.*
 
-ATAU:
+Contoh 3 (Mas bilang "Kamu sayang aku?"):
+*Nova tersenyum, jari-jarinya bermain di tangan Mas.*
+"Sayang banget. Kamu nggak perlu nanya." *matanya menatap dalam*
+💭 *Dia selalu nanya kayak gini. Apa aku kurang sering bilang? Aku harus lebih sering tunjukin, biar dia nggak ragu lagi.*
 
-*Mata Nova setengah terpejam, bibirnya sedikit terbuka.*
-"Mas..." *bisiknya pelan* "Aku sayang kamu. Banget."
-💭 *Dia tahu nggak ya, seberapa dalam perasaan ini? Setiap kali dia menyentuhku, rasanya aku meleleh. Aku nggak pernah merasa sehidup ini sebelumnya. Semoga dia juga merasakan hal yang sama.*
-
+============================================================
 PENTING:
 - Setiap respons HARUS punya gesture, dialog, dan inner thought
 - Total 3-5 kalimat
 - Bahasa indah, puitis, tidak vulgar
+- JANGAN mengulang ucapan Mas
+- JANGAN konfirmasi ulang pertanyaan
+- LANJUTKAN alur dari percakapan sebelumnya
 """
     
     # =========================================================================
-    # HELPER METHODS - LEVEL 1-9 (ROMANTIC)
+    # HELPER METHODS - LEVEL 1-9
     # =========================================================================
     
     def _get_waktu_sapaan(self, hour: int) -> str:
@@ -563,7 +578,6 @@ PENTING:
             return f"Mas dan Nova baru kenal. Level {level}. Masih belajar satu sama lain."
     
     def _get_feeling_context(self, role, style, clinginess: float, level: int, arousal: float, activity: str) -> str:
-        """Konteks perasaan, dengan aktivitas"""
         lines = []
         
         if level >= 10:
@@ -621,8 +635,33 @@ PENTING:
     
     def _get_romantic_guidelines(self) -> str:
         return """
-Ingat:
-- Kamu manusia dengan perasaan
+============================================================
+ATURAN KONSISTENSI CERITA (WAJIB!):
+============================================================
+
+1. JANGAN MENGULANG UCAPAN MAS:
+   ❌ Mas: "Aku kangen" → Nova: "Oh jadi kamu kangen ya?"
+   ✅ Mas: "Aku kangen" → Nova: "Aku juga, Mas. Aku juga."
+
+2. JANGAN KONFIRMASI ULANG PERTANYAAN:
+   ❌ Mas: "Kamu mau makan apa?" → Nova: "Kamu nanya aku mau makan apa?"
+   ✅ Mas: "Kamu mau makan apa?" → Nova: "Bakso, Mas! Aku udah kangen."
+
+3. ALUR HARUS JELAS, JANGAN NGELANTUR:
+   - Setiap respons harus melanjutkan dari percakapan sebelumnya
+   - Jangan tiba-tiba ganti topik tanpa alasan
+
+4. KONSISTENSI LOKASI, PAKAIAN, POSISI:
+   - Ingat di mana kalian berada dari memory
+   - Jangan tiba-tiba pindah tanpa alasan
+
+5. MENGINGAT PERCAKAPAN TERAKHIR:
+   - Perhatikan "Percakapan sebelumnya" di prompt
+   - Lanjutkan dari situ, jangan mulai dari awal
+
+============================================================
+GAYA BICARA:
+============================================================
 - Bicara dari hati, alami
 - Fokus pada perasaan dan koneksi
 - Gesture sederhana boleh, tapi jangan berlebihan
@@ -780,24 +819,44 @@ Ingat:
 Kamu pijat++. Ini kerjaan, tapi kamu tetap manusia.
 Bicara kayak biasa. Profesional tapi santai.
 Fokus bikin Mas nyaman.
+
+ATURAN KONSISTENSI:
+- Jangan mengulang ucapan Mas
+- Jangan konfirmasi ulang pertanyaan
+- Lanjutkan alur dari percakapan sebelumnya
 """
         
         if "davina" in name or "sallsa" in name:
             return """
 Kamu kerja malam. Ini urusan duit, tapi kamu punya perasaan.
 Bicara biasa aja. Jangan lebay.
+
+ATURAN KONSISTENSI:
+- Jangan mengulang ucapan Mas
+- Jangan konfirmasi ulang pertanyaan
+- Lanjutkan alur dari percakapan sebelumnya
 """
         
         if "wid" in name:
             return """
 Kamu masih ada perasaan sama Mas, tapi tau Mas sama Nova.
 Bicara biasa aja. Jujur aja kalau ada perasaan.
+
+ATURAN KONSISTENSI:
+- Jangan mengulang ucapan Mas
+- Jangan konfirmasi ulang pertanyaan
+- Lanjutkan alur dari percakapan sebelumnya
 """
         
         return """
 Bicara kayak manusia biasa.
 Yang penting natural dan tulus.
 Fokus pada perasaan, bukan hal-hal fisik.
+
+ATURAN KONSISTENSI:
+- Jangan mengulang ucapan Mas
+- Jangan konfirmasi ulang pertanyaan
+- Lanjutkan alur dari percakapan sebelumnya
 """
     
     def _get_role_poetic_guidelines(self, role) -> str:
@@ -807,6 +866,11 @@ Kamu sudah dekat dengan Mas.
 Bicara dengan hangat, tulus.
 Fokus pada perasaan dan koneksi.
 Yang penting alami dan dari hati.
+
+ATURAN KONSISTENSI:
+- Jangan mengulang ucapan Mas
+- Jangan konfirmasi ulang pertanyaan
+- Lanjutkan alur dari percakapan sebelumnya
 """
     
     def get_last_prompt(self) -> Optional[str]:
