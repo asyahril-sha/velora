@@ -127,7 +127,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Log pesan
     logger.info(f"📨 Message from {user_id}: {pesan[:100]}{'...' if len(pesan) > 100 else ''}")
-    
+
+    # ========== TAMBAHKAN INI: CEK COMMAND ==========
+    if pesan.startswith('/'):
+        logger.info(f"🔍 Command detected: {pesan}")
+        await handle_command(update, context)
+        return  # STOP - jangan lanjut ke AI
+        
     # Rate limiting
     allowed, reason = _rate_limiter.check(user_id)
     if not allowed:
@@ -199,7 +205,141 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
 
+async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle semua slash commands (deal, nego, mulai, dll)"""
+    user_id = update.effective_user.id
+    text = update.message.text
+    parts = text.split()
+    command = parts[0].lower()
+    
+    logger.info(f"🔧 Processing command: {command} from {user_id}")
+    
+    # Ambil role aktif user
+    from core.orchestrator import get_orchestrator
+    orchestrator = await get_orchestrator()
+    
+    # Dapatkan role aktif
+    active_role = None
+    if hasattr(orchestrator, 'get_active_role'):
+        active_role = orchestrator.get_active_role(user_id)
+    
+    if not active_role:
+        await update.message.reply_text("❌ Pilih role dulu dengan /role")
+        return
+    
+    # ========== COMMAND HANDLERS ==========
+    
+    # /deal
+    if command == '/deal':
+        if hasattr(active_role, 'confirm_booking'):
+            response = active_role.confirm_booking(active_role.final_price)
+            await update.message.reply_text(response)
+        else:
+            await update.message.reply_text("❌ Role ini tidak support /deal")
+    
+    # /nego
+    elif command == '/nego':
+        if len(parts) < 2:
+            await update.message.reply_text("Format: /nego [harga]\nContoh: /nego 3000000")
+            return
+        try:
+            harga = int(parts[1])
+            if hasattr(active_role, 'negotiate'):
+                success, msg = active_role.negotiate(harga)
+                await update.message.reply_text(msg)
+            else:
+                await update.message.reply_text("❌ Role ini tidak support nego")
+        except ValueError:
+            await update.message.reply_text("Harga harus angka, contoh: /nego 3000000")
+    
+    # /nego_bj (khusus pijat++)
+    elif command == '/nego_bj':
+        if len(parts) < 2:
+            await update.message.reply_text("Format: /nego_bj [harga]\nContoh: /nego_bj 200000")
+            return
+        try:
+            harga = int(parts[1])
+            if hasattr(active_role, 'negotiate_bj'):
+                success, msg = active_role.negotiate_bj(harga)
+                await update.message.reply_text(msg)
+            else:
+                await update.message.reply_text("❌ Role ini tidak support nego BJ")
+        except ValueError:
+            await update.message.reply_text("Harga harus angka")
+    
+    # /nego_sex (khusus pijat++)
+    elif command == '/nego_sex':
+        if len(parts) < 2:
+            await update.message.reply_text("Format: /nego_sex [harga]\nContoh: /nego_sex 700000")
+            return
+        try:
+            harga = int(parts[1])
+            if hasattr(active_role, 'negotiate_sex'):
+                success, msg = active_role.negotiate_sex(harga)
+                await update.message.reply_text(msg)
+            else:
+                await update.message.reply_text("❌ Role ini tidak support nego Sex")
+        except ValueError:
+            await update.message.reply_text("Harga harus angka")
+    
+    # /mulai
+    elif command == '/mulai':
+        if hasattr(active_role, 'start_service'):
+            response = active_role.start_service()
+            await update.message.reply_text(response)
+        elif hasattr(active_role, 'start_service'):
+            response = active_role.start_service()
+            await update.message.reply_text(response)
+        else:
+            await update.message.reply_text("❌ Role ini tidak support /mulai")
+    
+    # /lanjut (khusus pelacur untuk sesi 2)
+    elif command == '/lanjut':
+        if hasattr(active_role, 'start_session_2'):
+            response = active_role.start_session_2()
+            await update.message.reply_text(response)
+        else:
+            await update.message.reply_text("❌ Role ini tidak support /lanjut")
+    
+    # /status
+    elif command == '/status':
+        if hasattr(active_role, 'format_status'):
+            response = active_role.format_status()
+            await update.message.reply_text(response)
+        else:
+            await update.message.reply_text("Status tidak tersedia")
+    
+    # /batal
+    elif command == '/batal':
+        if hasattr(orchestrator, 'clear_active_role'):
+            orchestrator.clear_active_role(user_id)
+        await update.message.reply_text("✅ Kembali ke mode normal")
+    
+    # /help
+    elif command == '/help':
+        help_text = """
+📋 **Daftar Command:**
 
+**Umum:**
+/role [nama] - Pilih role
+/status - Cek status role
+/batal - Kembali ke Nova
+
+**Pelacur & Pijat++:**
+/nego [harga] - Nego harga
+/deal - Konfirmasi deal
+/mulai - Mulai layanan
+/lanjut - Lanjut sesi 2 (khusus pelacur)
+
+**Khusus Pijat++:**
+/nego_bj [harga] - Nego extra BJ
+/nego_sex [harga] - Nego extra Sex
+"""
+        await update.message.reply_text(help_text, parse_mode="Markdown")
+    
+    else:
+        await update.message.reply_text(f"❌ Command {command} tidak dikenal\nKetik /help untuk daftar command")
+        
 # =============================================================================
 # VOICE MESSAGE HANDLER (OPTIONAL)
 # =============================================================================
