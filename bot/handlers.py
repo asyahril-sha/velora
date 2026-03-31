@@ -767,7 +767,231 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Stats error: {e}")
         await update.message.reply_text(f"❌ Gagal mengambil statistik: {e}")
 
+# =============================================================================
+# COMMAND HANDLERS - LAYANAN (DEAL, MULAI, NEGO, DLL)
+# =============================================================================
 
+async def nego_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /nego [harga] - Nego harga"""
+    user_id = update.effective_user.id
+    args = context.args
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    if not args:
+        await update.message.reply_text(
+            "❌ Masukkan harga.\n\n"
+            "Contoh: `/nego 3000000`\n\n"
+            "Harga minimal: Rp3.000.000 untuk pelacur, Rp200.000 untuk pijat."
+        )
+        return
+    
+    try:
+        harga = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Harga harus angka. Contoh: `/nego 3000000`")
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method negotiate
+    if hasattr(role, 'negotiate'):
+        success, response = role.negotiate(harga)
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini tidak support nego.")
+
+
+async def deal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /deal - Konfirmasi deal"""
+    user_id = update.effective_user.id
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method confirm_booking
+    if hasattr(role, 'confirm_booking'):
+        response = role.confirm_booking(role.final_price if hasattr(role, 'final_price') else 0)
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini tidak support booking.")
+
+
+async def mulai_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /mulai - Mulai layanan"""
+    user_id = update.effective_user.id
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method start_service atau _get_start_message
+    if hasattr(role, 'start_service'):
+        response = role.start_service()
+        await update.message.reply_text(response)
+    elif hasattr(role, '_get_start_message'):
+        response = role._get_start_message()
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini belum siap dimulai.")
+
+
+async def lanjut_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /lanjut - Lanjut sesi 2 (pelacur)"""
+    user_id = update.effective_user.id
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method start_session_2
+    if hasattr(role, 'start_session_2'):
+        response = role.start_session_2()
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini tidak memiliki sesi 2.")
+
+
+async def nego_bj_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /nego_bj [harga] - Nego BJ (pijat++)"""
+    user_id = update.effective_user.id
+    args = context.args
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    if not args:
+        await update.message.reply_text(
+            "❌ Masukkan harga.\n\n"
+            "Contoh: `/nego_bj 200000`\n\n"
+            "Harga minimal: Rp200.000"
+        )
+        return
+    
+    try:
+        harga = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Harga harus angka. Contoh: `/nego_bj 200000`")
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method negotiate_bj
+    if hasattr(role, 'negotiate_bj'):
+        success, response = role.negotiate_bj(harga)
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini tidak support nego BJ.")
+
+
+async def nego_sex_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler /nego_sex [harga] - Nego Sex (pijat++)"""
+    user_id = update.effective_user.id
+    args = context.args
+    settings = get_settings()
+    
+    if user_id != settings.admin_id:
+        return
+    
+    if not args:
+        await update.message.reply_text(
+            "❌ Masukkan harga.\n\n"
+            "Contoh: `/nego_sex 700000`\n\n"
+            "Harga minimal: Rp700.000"
+        )
+        return
+    
+    try:
+        harga = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Harga harus angka. Contoh: `/nego_sex 700000`")
+        return
+    
+    # Dapatkan role aktif
+    active_role_id = get_active_role(user_id)
+    if not active_role_id:
+        await update.message.reply_text("❌ Pilih role dulu dengan `/role`")
+        return
+    
+    role_manager = get_role_manager()
+    role = role_manager.get_role(active_role_id)
+    
+    if not role:
+        await update.message.reply_text("❌ Role tidak ditemukan.")
+        return
+    
+    # Cek apakah role punya method negotiate_sex
+    if hasattr(role, 'negotiate_sex'):
+        success, response = role.negotiate_sex(harga)
+        await update.message.reply_text(response)
+    else:
+        await update.message.reply_text("❌ Role ini tidak support nego sex.")
+        
 # =============================================================================
 # REGISTER HANDLERS
 # =============================================================================
@@ -790,6 +1014,15 @@ def register_handlers(application):
     application.add_handler(CommandHandler("resume", resume_session))
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("stats", stats_command))
+
+    # ========== TAMBAHKAN HANDLER LAYANAN ==========
+    application.add_handler(CommandHandler("nego", nego_command))
+    application.add_handler(CommandHandler("deal", deal_command))
+    application.add_handler(CommandHandler("mulai", mulai_command))
+    application.add_handler(CommandHandler("lanjut", lanjut_command))
+    application.add_handler(CommandHandler("nego_bj", nego_bj_command))
+    application.add_handler(CommandHandler("nego_sex", nego_sex_command))
+    # ==============================================
     
     logger.info("✅ All command handlers registered")
     
