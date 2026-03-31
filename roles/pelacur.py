@@ -717,110 +717,6 @@ Ketik **/lanjut** buat sesi 2.
 
 "Coba kasih tau, Mas mau yang kayak gimana?"
 """
-        # =========================================================================
-        # AI RESPONSE GENERATION (dipanggil oleh RoleManager)
-        # =========================================================================
-    
-        async def generate_response(self, message: str, context: dict = None) -> str:
-            """
-            Generate AI response untuk pelacur.
-            Method ini dipanggil oleh RoleManager saat user chat dengan role ini.
-            """
-            if context is None:
-                context = {}
-        
-            # Cek status layanan
-            if self.status == ServiceStatus.ACTIVE:
-                return await self._generate_active_response(message)
-            elif self.status == ServiceStatus.BOOKED:
-                return await self._generate_booked_response(message)
-            else:
-                return await self._generate_idle_response(message)
-    
-        async def _generate_active_response(self, message: str) -> str:
-            """Respons saat layanan aktif"""
-            try:
-                from bot.ai_client import get_ai_client
-            
-                phase_info = f"Sesi {self.current_session}/2 - Fase: {self.session_phase}"
-            
-                prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
-
-Karakter: {self.personality}
-Suara: {self.voice_style}
-
-{phase_info}
-Pesan dari Mas: "{message}"
-
-Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural, flirty, dan menggoda. Bisa pakai *deskripsi gerakan* dengan tanda bintang. Respons harus sesuai dengan fase layanan yang sedang berlangsung."""
-            
-                ai = get_ai_client()
-                response = await ai.chat(prompt, temperature=0.85)
-                return response
-            except Exception as e:
-                logger.error(f"AI error for {self.name}: {e}")
-                return self._get_fallback_response(message)
-    
-        async def _generate_booked_response(self, message: str) -> str:
-            """Respons saat sudah booking tapi belum mulai"""
-            try:
-                from bot.ai_client import get_ai_client
-            
-                prompt = f"""Kamu adalah {self.name}, {'berhijab' if self.hijab else 'tanpa hijab'} dengan payudara {self.boob_size}.
-Karakter: {self.personality}
-Suara: {self.voice_style}
-Sudah deal dengan harga Rp{self.final_price:,} untuk booking 6 jam full service.
-
-Pesan dari Mas: "{message}"
-
-Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Ingatkan Mas untuk ketik **/mulai** jika ingin memulai layanan. Respons bisa flirty dan menggoda untuk membangkitkan mood."""
-            
-                ai = get_ai_client()
-                return await ai.chat(prompt, temperature=0.8)
-            except Exception:
-                return f"Halo Mas, aku {self.name}. Udah deal ya? Langsung **/mulai** aja kalau udah siap 😊"
-    
-        async def _generate_idle_response(self, message: str) -> str:
-            """Respons saat belum ada booking"""
-            try:
-                from bot.ai_client import get_ai_client
-            
-                prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
-
-Karakter: {self.personality}
-Suara: {self.voice_style}
-Penampilan: {self.appearance[:100]}
-Harga: Rp{self.base_price:,} (nego sampai Rp{self.min_price:,})
-
-Status: Menunggu customer. Belum ada booking.
-
-Pesan dari customer: "{message}"
-
-Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons harus menggoda dan profesional. Jelaskan layanan 6 jam full service dengan auto scene. Ajak customer untuk deal atau nego. Bisa pakai *deskripsi gerakan* dengan tanda bintang."""
-            
-                ai = get_ai_client()
-                return await ai.chat(prompt, temperature=0.85)
-            except Exception:
-                return self.get_greeting()
-    
-        def _get_fallback_response(self, message: str) -> str:
-            """Fallback response jika AI error"""
-            if self.name == "Davina Karamoy":
-                responses = [
-                    f"*{self.name} tersenyum manis* Ada yang bisa Davina bantu, Mas?",
-                    f"*{self.name} menatap dengan mata sayu* Mas, cerita dulu yuk...",
-                    f"*{self.name} merapikan {'hijab' if self.hijab else 'rambut'}* Davina dengerin kok, Mas...",
-                    f"*{self.name} duduk lebih dekat* Ayo Mas, cerita..."
-                ]
-            else:
-                responses = [
-                    f"*{self.name} tertawa kecil* Hahaha, Mas ini ngerjain aku ya?",
-                    f"*{self.name} mendekat* Ayo Mas, cerita...",
-                    f"*{self.name} menggigit bibir* Mas, jangan bikin aku penasaran dong...",
-                    f"*{self.name} memainkan rambut* Iya Mas? Ada yang mau dibicarain?"
-              ]
-        
-            return random.choice(responses)
             
     # =========================================================================
     # FORMAT STATUS
@@ -876,7 +772,112 @@ Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons 
         })
         if len(self.service_history) > 100:
             self.service_history.pop(0)
+          
+    # =========================================================================
+    # AI RESPONSE GENERATION (dipanggil oleh RoleManager)
+    # =========================================================================
     
+    async def generate_response(self, message: str, context: dict = None) -> str:
+        """
+        Generate AI response untuk pelacur.
+        Method ini dipanggil oleh RoleManager saat user chat dengan role ini.
+        """
+        if context is None:
+            context = {}
+        
+        # Cek status layanan
+        if self.status == ServiceStatus.ACTIVE:
+            return await self._generate_active_response(message)
+        elif self.status == ServiceStatus.BOOKED:
+            return await self._generate_booked_response(message)
+        else:
+            return await self._generate_idle_response(message)
+    
+    async def _generate_active_response(self, message: str) -> str:
+        """Respons saat layanan aktif"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            phase_info = f"Sesi {self.current_session}/2 - Fase: {self.session_phase}"
+            
+            prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
+
+Karakter: {self.personality}
+Suara: {self.voice_style}
+
+{phase_info}
+Pesan dari Mas: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural, flirty, dan menggoda. Bisa pakai *deskripsi gerakan* dengan tanda bintang. Respons harus sesuai dengan fase layanan yang sedang berlangsung."""
+            
+            ai = get_ai_client()
+            response = await ai.chat(prompt, temperature=0.85)
+            return response
+        except Exception as e:
+            logger.error(f"AI error for {self.name}: {e}")
+            return self._get_fallback_response(message)
+    
+    async def _generate_booked_response(self, message: str) -> str:
+        """Respons saat sudah booking tapi belum mulai"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            prompt = f"""Kamu adalah {self.name}, {'berhijab' if self.hijab else 'tanpa hijab'} dengan payudara {self.boob_size}.
+Karakter: {self.personality}
+Suara: {self.voice_style}
+Sudah deal dengan harga Rp{self.final_price:,} untuk booking 6 jam full service.
+
+Pesan dari Mas: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Ingatkan Mas untuk ketik **/mulai** jika ingin memulai layanan. Respons bisa flirty dan menggoda untuk membangkitkan mood."""
+            
+            ai = get_ai_client()
+            return await ai.chat(prompt, temperature=0.8)
+        except Exception:
+            return f"Halo Mas, aku {self.name}. Udah deal ya? Langsung **/mulai** aja kalau udah siap 😊"
+    
+    async def _generate_idle_response(self, message: str) -> str:
+        """Respons saat belum ada booking"""
+        try:
+            from bot.ai_client import get_ai_client
+            
+            prompt = f"""Kamu adalah {self.name}, {'wanita berhijab' if self.hijab else 'wanita tanpa hijab'} dengan payudara {self.boob_size}.
+
+Karakter: {self.personality}
+Suara: {self.voice_style}
+Penampilan: {self.appearance[:100]}
+Harga: Rp{self.base_price:,} (nego sampai Rp{self.min_price:,})
+
+Status: Menunggu customer. Belum ada booking.
+
+Pesan dari customer: "{message}"
+
+Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons harus menggoda dan profesional. Jelaskan layanan 6 jam full service dengan auto scene. Ajak customer untuk deal atau nego. Bisa pakai *deskripsi gerakan* dengan tanda bintang."""
+            
+            ai = get_ai_client()
+            return await ai.chat(prompt, temperature=0.85)
+        except Exception:
+            return self.get_greeting()
+    
+    def _get_fallback_response(self, message: str) -> str:
+        """Fallback response jika AI error"""
+        if self.name == "Davina Karamoy":
+            responses = [
+                f"*{self.name} tersenyum manis* Ada yang bisa Davina bantu, Mas?",
+                f"*{self.name} menatap dengan mata sayu* Mas, cerita dulu yuk...",
+                f"*{self.name} merapikan {'hijab' if self.hijab else 'rambut'}* Davina dengerin kok, Mas...",
+                f"*{self.name} duduk lebih dekat* Ayo Mas, cerita..."
+            ]
+        else:
+             responses = [
+                f"*{self.name} tertawa kecil* Hahaha, Mas ini ngerjain aku ya?",
+                f"*{self.name} mendekat* Ayo Mas, cerita...",
+                f"*{self.name} menggigit bibir* Mas, jangan bikin aku penasaran dong...",
+                f"*{self.name} memainkan rambut* Iya Mas? Ada yang mau dibicarain?"
+              ]
+        
+        return random.choice(responses)
+        
     # =========================================================================
     # SERIALIZATION
     # =========================================================================
