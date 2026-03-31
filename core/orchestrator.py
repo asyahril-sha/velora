@@ -23,6 +23,7 @@ from core.world import WorldState, get_world_state
 from core.reality_engine import IntentScorer, get_reality_engine
 from roles.manager import RoleManager, get_role_manager
 from bot.prompt import get_prompt_builder
+from core.tracker import StateTracker
 
 logger = logging.getLogger(__name__)
 
