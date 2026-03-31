@@ -657,6 +657,21 @@ Ketik **/mulai** untuk memulai layanan.
                 lines.append(f"{self.name}: {c['role']}")
         
         return "\n".join(lines)
+
+    def update_from_message(self, pesan_user: str) -> Dict[str, Any]:
+        """
+        Update state dari pesan user (untuk kompatibilitas dengan BaseRole).
+        Provider tidak punya emosi, jadi return empty dict.
+        Dipanggil oleh orchestrator saat user mengirim pesan.
+        """
+        # Update last interaction
+        self.last_interaction = time.time()
+    
+        # Simpan ke conversation history
+        self.add_conversation(pesan_user, "")
+    
+        # Return empty changes (tidak ada perubahan emosi)
+        return {}
     
     # =========================================================================
     # UTILITY
