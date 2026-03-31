@@ -7,7 +7,6 @@ Pusat kendali untuk semua role.
 - Integrasi dengan MemoryManager dan World
 - Proactive chat & natural intimacy checks
 - Session management per user
-- Terintegrasi dengan PromptBuilder untuk respons natural
 """
 
 import time
@@ -22,8 +21,6 @@ from core.memory import MemoryManager, get_memory_manager
 from core.world import WorldState, get_world_state
 from core.reality_engine import IntentScorer, get_reality_engine
 from roles.manager import RoleManager, get_role_manager
-from bot.prompt import get_prompt_builder
-from core.tracker import StateTracker
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +40,8 @@ class RoutingResult(str, Enum):
 class RoleOrchestrator:
     """
     Role Orchestrator - Pusat kendali semua role.
-    Terintegrasi dengan PromptBuilder untuk respons natural.
+    Menggunakan IntentScorer untuk routing yang cerdas,
+    dan cross-role effect dengan delay & probabilitas.
     """
     
     def __init__(self):
@@ -51,7 +49,6 @@ class RoleOrchestrator:
         self.world: Optional[WorldState] = None
         self.role_manager: Optional[RoleManager] = None
         self.intent_scorer: Optional[IntentScorer] = None
-        self.prompt_builder = None  # Akan diinisialisasi di initialize
         
         # Session tracking
         self.active_sessions: Dict[int, str] = {}           # user_id -> active_role_id
@@ -81,12 +78,11 @@ class RoleOrchestrator:
         self.world = world or get_world_state()
         self.role_manager = role_manager or get_role_manager()
         self.intent_scorer = IntentScorer()
-        self.prompt_builder = get_prompt_builder()
         
         # Initialize role manager dengan memory dan world
         await self.role_manager.initialize(self.memory, self.world)
         
-        logger.info("🎭 Role Orchestrator fully initialized with IntentScorer and PromptBuilder")
+        logger.info("🎭 Role Orchestrator fully initialized with IntentScorer")
     
     # =========================================================================
     # MESSAGE ROUTING (UPDATED with IntentScorer)
@@ -118,7 +114,7 @@ class RoleOrchestrator:
                 if target_role in self.role_manager.roles:
                     return target_role, RoutingResult.TO_ROLE
         
-        # 3. Intent scoring
+        # 3. Intent scoring (BARU!)
         recent = self.recent_roles.get(user_id, [])
         active = self.active_sessions.get(user_id)
         
@@ -285,13 +281,13 @@ class RoleOrchestrator:
             del self.session_emotion_buffer[user_id][key]
     
     # =========================================================================
-    # MAIN HANDLE MESSAGE (UPDATED)
+    # MAIN HANDLE MESSAGE
     # =========================================================================
     
     async def handle_message(self, message: str, user_id: int) -> str:
         """
         Handle pesan dari user.
-        Menggunakan PromptBuilder untuk membangun prompt yang natural.
+        Menggunakan Reality Engine untuk processing.
         """
         # Update last interaction
         self.last_interaction[user_id] = time.time()
@@ -351,70 +347,27 @@ class RoleOrchestrator:
             tags=['user_message']
         )
         
-        # ========== GENERATE RESPONSE USING PROMPT BUILDER ==========
-        # Gunakan prompt builder untuk membangun prompt yang natural
-        if target_role_id == 'nova':
-            prompt = self.prompt_builder.build_nova_prompt(role, message, context={
-                'recalled_memories': recalled,
-                'routing_result': routing_result
-            })
-        else:
-            prompt = self.prompt_builder.build_role_prompt(role, message, context={
-                'recalled_memories': recalled,
-                'routing_result': routing_result
-            })
+        # Generate response via AI
+        response = await self.role_manager.process_message(target_role_id, message, user_id)
         
-        # Get AI client dan generate response
-        from bot.ai_client import get_ai_client
-        ai_client = get_ai_client()
-        
-        # Tentukan temperature berdasarkan level dan situasi
-        level = role.relationship.level
-        arousal = role.emotional.arousal if hasattr(role, 'emotional') else 0
-        
-        if level >= 10 and arousal > 70:
-            temperature = 0.9  # Lebih kreatif untuk momen intim
-        elif level >= 7:
-            temperature = 0.8
-        else:
-            temperature = 0.7
-        
-        response = await ai_client.generate_with_context(
-            context=prompt,
-            user_message=message,
-            temperature=temperature,
-            max_tokens=400  # Cukup untuk 3-5 kalimat
-        )
-        
-        # Clean up response (remove any extra whitespace)
-        response = response.strip()
-        
-        # ========== ADD IMPERFECTIONS ==========
-        # Tambahkan imperfections berdasarkan emosi
-        emotion_intensity = max(
-            role.emotional.sayang, 
-            role.emotional.arousal, 
-            role.emotional.cemburu
-        ) / 100 if hasattr(role, 'emotional') else 0.3
-        
+        # Add imperfections based on emotion intensity
+        emotion_intensity = max(role.emotional.sayang, role.emotional.arousal, role.emotional.cemburu) / 100
         response = reality.add_imperfections(response, emotion_intensity)
         
-        # ========== ADD SCENE IF NEEDED ==========
-        # Untuk level rendah yang belum punya inner thought, tambahkan scene jika perlu
-        if level < 10 and routing_result != RoutingResult.TO_PROVIDER:
-            # Cek apakah response sudah punya gesture
-            if not response.startswith('*') and not '💭' in response:
-                style = role.emotional.get_current_style() if hasattr(role, 'emotional') else None
-                if style:
-                    scene = reality.scene_engine.get_body_language(
-                        style.value if hasattr(style, 'value') else (style if style else "neutral"),
-                        emotion_intensity
-                    )
-                    if scene and scene not in response:
-                        response = f"{scene}\n\n{response}"
+        # Add scene if needed (for non-provider roles)
+        if routing_result != RoutingResult.TO_PROVIDER:
+            style = role.emotional.get_current_style()
+            scene = reality.scene_engine.get_body_language(
+                style.value if style else "neutral",
+                emotion_intensity
+            )
+            if scene and scene not in response and not response.startswith('*'):
+                response = f"{scene}\n\n{response}"
         
-        # ========== LOG & RETURN ==========
-        logger.info(f"📨 User {user_id} → {target_role_id} | Level: {level} | Response length: {len(response)} chars")
+        # Propagate cross-role effect (delayed)
+        await self._propagate_cross_role_effect(target_role_id, message, update_result, user_id)
+        
+        logger.info(f"📨 User {user_id} → {target_role_id} | Processing time: {reality.processing_time:.3f}s | Drama: {self.world.drama_level:.0f}%")
         
         return response
     
