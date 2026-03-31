@@ -35,9 +35,6 @@ class BaseRole:
     Base class untuk semua role.
     State terpusat di MemoryManager, tidak ada duplikasi.
     Setiap role punya emosi, relationship, conflict, dan reality engine sendiri.
-    
-    NOTE: generate_response() sekarang ada di orchestrator, bukan di sini.
-    Role ini hanya untuk state management dan konteks.
     """
     
     def __init__(self,
@@ -69,7 +66,7 @@ class BaseRole:
         self.relationship = RelationshipManager()
         self.conflict = ConflictEngine()
         
-        # ========== REALITY ENGINE ==========
+        # ========== REALITY ENGINE (BARU - UNTUK REALISM 9.9) ==========
         self.reality = get_reality_engine(role_id, personality_traits)
         
         # ========== MEMORY & WORLD (GLOBAL) ==========
@@ -90,6 +87,8 @@ class BaseRole:
         
         # ========== STATUS ==========
         self.is_active: bool = False
+
+        self.awareness_level = AwarenessLevel.LIMITED
         
         logger.info(f"👤 Role {self.name} ({self.nickname}) initialized | Awareness: {awareness_level.value}")
     
@@ -227,184 +226,96 @@ class BaseRole:
         pass
     
     # =========================================================================
-    # CONTEXT FOR PROMPT (DIPANGGIL OLEH PROMPT BUILDER)
+    # GENERATE RESPONSE
     # =========================================================================
     
-    def get_context_for_prompt(self) -> str:
+    async def generate_response(self, pesan_user: str, context: str = None) -> str:
         """
-        Dapatkan konteks lengkap untuk prompt AI.
-        Digunakan oleh PromptBuilder untuk membangun prompt natural.
+        Generate response menggunakan AI dengan RealityEngine enhancements.
         """
-        if not self.memory:
-            return "Memory tidak tersedia."
+        from bot.prompt import get_prompt_builder
+        from bot.ai_client import get_ai_client
         
-        # Dapatkan konteks dari memory (sudah difilter)
-        memory_context = self.memory.get_context_for_role(self.id)
-        
-        # Dapatkan emotional summary dalam bentuk natural
-        emo_summary = self._get_natural_emotional_summary()
-        
-        # Dapatkan relationship summary
-        rel_summary = self._get_natural_relationship_summary()
-        
-        # Dapatkan conflict summary
-        conflict_summary = self._get_natural_conflict_summary()
-        
-        # Dapatkan percakapan terakhir
-        recent_convo = self.get_recent_conversations(8)
-        
-        # Dapatkan role flags
-        flags_summary = self._get_flags_summary()
-        
-        # Dapatkan personality drift
-        personality = self.reality.personality_drift.get_description()
-        
-        # Dapatkan lokasi dan pakaian dari memory tracker
-        location = ""
-        clothing = ""
-        position = ""
-        if self.memory and self.memory.tracker:
-            location = getattr(self.memory.tracker, 'location', 'di rumah')
-            clothing = getattr(self.memory.tracker, 'clothing', 'pakaian biasa')
-            position = getattr(self.memory.tracker, 'position', 'duduk')
-        
-        return f"""
-═══════════════════════════════════════════════════════════════
-📝 INGATAN NOVA:
-═══════════════════════════════════════════════════════════════
-{memory_context[:2000] if memory_context else "Mas lagi ngobrol sama Nova sekarang."}
-
-═══════════════════════════════════════════════════════════════
-💜 PERASAAN NOVA:
-═══════════════════════════════════════════════════════════════
-{emo_summary}
-
-═══════════════════════════════════════════════════════════════
-💕 HUBUNGAN:
-═══════════════════════════════════════════════════════════════
-{rel_summary}
-
-{conflict_summary}
-
-═══════════════════════════════════════════════════════════════
-📍 LOKASI & PAKAIAN:
-═══════════════════════════════════════════════════════════════
-Lokasi: {location}
-Pakaian: {clothing}
-Posisi: {position}
-
-{flags_summary}
-
-🧠 KEPRIBADIAN: {personality if personality else 'Nova itu hangat dan perhatian.'}
-
-═══════════════════════════════════════════════════════════════
-💬 PERCAKAPAN TERAKHIR:
-═══════════════════════════════════════════════════════════════
-{recent_convo if recent_convo else "Belum ada percakapan"}
-"""
-    
-    def _get_natural_emotional_summary(self) -> str:
-        """
-        Dapatkan ringkasan emosi dalam bahasa natural.
-        Untuk digunakan di prompt.
-        """
-        sayang = self.emotional.sayang
-        rindu = self.emotional.rindu
-        cemburu = self.emotional.cemburu
-        kecewa = self.emotional.kecewa
-        arousal = self.emotional.arousal
-        
-        lines = []
-        
-        if sayang > 80:
-            lines.append("Nova sayang banget sama Mas. Rasanya hangat setiap kali ngobrol.")
-        elif sayang > 60:
-            lines.append("Nova sayang sama Mas. Seneng banget bisa bareng.")
-        elif sayang > 40:
-            lines.append("Nova mulai sayang sama Mas.")
-        
-        if rindu > 70:
-            lines.append("Nova kangen berat. Pengen ketemu, pengen ngobrol lama-lama.")
-        elif rindu > 50:
-            lines.append("Nova kangen. Pengen denger suara Mas.")
-        
-        if cemburu > 60:
-            lines.append("Nova lagi cemburu. Ada yang mengganjal di hati.")
-        elif cemburu > 40:
-            lines.append("Nova sedikit cemburu. Tapi nggak mau ngomong.")
-        
-        if kecewa > 50:
-            lines.append("Nova kecewa. Sedikit sakit hati.")
-        
-        if arousal > 70 and self.relationship.level >= 10:
-            lines.append("Ada kehangatan yang mengalir di tubuh Nova. Seperti api kecil yang menyala.")
-        elif arousal > 50:
-            lines.append("Nova merasa ada getaran hangat di dada.")
-        
-        if not lines:
-            lines.append("Nova lagi biasa aja. Santai.")
-        
-        return "\n".join(lines)
-    
-    def _get_natural_relationship_summary(self) -> str:
-        """
-        Dapatkan ringkasan hubungan dalam bahasa natural.
-        """
-        level = self.relationship.level
-        phase = self.relationship.phase
-        
-        if level >= 11:
-            return f"Hubungan Nova dan Mas sudah sangat dalam. Level {level}. Mereka sudah seperti satu jiwa."
-        elif level >= 9:
-            return f"Hubungan Nova dan Mas sudah level {level}. {phase.value}. Sudah saling percaya."
-        elif level >= 7:
-            return f"Hubungan Nova dan Mas sudah dekat. Level {level}. Sering ngobrol, sering ketemu."
-        elif level >= 5:
-            return f"Hubungan Nova dan Mas mulai dekat. Level {level}. Mulai saling percaya."
-        else:
-            return f"Hubungan Nova dan Mas masih baru. Level {level}. Masih kenalan."
-    
-    def _get_natural_conflict_summary(self) -> str:
-        """
-        Dapatkan ringkasan konflik dalam bahasa natural.
-        """
-        if not self.conflict.is_in_conflict:
-            return ""
-        
-        conflict_type = self.conflict.get_active_conflict_type()
-        if not conflict_type:
-            return ""
-        
-        lines = ["⚠️ KONFLIK:"]
-        
-        if conflict_type.value == "jealousy":
-            lines.append("Nova lagi cemburu. Responsnya dingin, pendek. Tujuan: bikin Mas ngejar Nova.")
-        elif conflict_type.value == "disappointment":
-            lines.append("Nova kecewa. Suaranya kecil, matanya berkaca-kaca. Dia nunggu Mas minta maaf.")
-        elif conflict_type.value == "anger":
-            lines.append("Nova marah. Responsnya dingin, sarkastik.")
-        elif conflict_type.value == "hurt":
-            lines.append("Nova sakit hati. Sedih, nunggu perhatian Mas.")
-        
-        return "\n".join(lines)
-    
-    def _get_flags_summary(self) -> str:
-        """
-        Dapatkan ringkasan flags - OVERRIDE DI SUBCLASS.
-        """
-        if not self.flags:
-            return ""
-        
-        lines = ["🎭 FLAGS KHUSUS:"]
-        for key, value in self.flags.items():
-            if isinstance(value, bool):
-                lines.append(f"   {key}: {'✅' if value else '❌'}")
-            elif isinstance(value, (int, float)):
-                lines.append(f"   {key}: {value:.0f}%")
+        try:
+            # 1. Process through reality engine
+            current_emotion = {
+                'sayang': self.emotional.sayang,
+                'rindu': self.emotional.rindu,
+                'cemburu': self.emotional.cemburu,
+                'kecewa': self.emotional.kecewa,
+                'arousal': self.emotional.arousal,
+                'desire': self.emotional.desire
+            }
+            
+            reality_result = await self.reality.process(pesan_user, current_emotion)
+            
+            # 2. Build prompt sesuai tipe role
+            prompt_builder = get_prompt_builder()
+            if self.role_type == "nova":
+                prompt = prompt_builder.build_nova_prompt(self, pesan_user, context)
             else:
-                lines.append(f"   {key}: {value}")
-        
-        return "\n".join(lines)
+                prompt = prompt_builder.build_role_prompt(self, pesan_user, context)
+            
+            # 3. Add recalled memories to prompt
+            if reality_result.get('recalled_memories'):
+                prompt += f"\n\n📝 YANG DIINGAT:\n" + "\n".join([f"- {m[:100]}" for m in reality_result['recalled_memories'][:3]])
+            
+            # 4. Add inner thought if internal conflict
+            if reality_result.get('has_internal_conflict'):
+                inner = reality_result.get('inner_thought', '')
+                if inner:
+                    prompt += f"\n\n💭 PIKIRAN TERSEMBUNYI:\n{inner}"
+            
+            # 5. Call AI
+            ai_client = get_ai_client()
+            
+            # Determine temperature based on arousal and style
+            style = self.emotional.get_current_style()
+            arousal = self.emotional.arousal
+            
+            if arousal > 80:
+                temperature = 1.0
+            elif style == EmotionalStyle.FLIRTY:
+                temperature = 0.95
+            elif style == EmotionalStyle.COLD:
+                temperature = 0.7
+            else:
+                temperature = 0.85
+            
+            max_tokens = 1200 if arousal > 60 else 800
+            
+            response = await ai_client.generate_with_context(
+                prompt, 
+                pesan_user,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # 6. Clean response
+            response = response.strip()
+            
+            # 7. Add imperfections
+            emotion_intensity = max(self.emotional.sayang, self.emotional.arousal, self.emotional.cemburu) / 100
+            response = self.reality.add_imperfections(response, emotion_intensity)
+            
+            # 8. Add scene if needed
+            if self.role_type != "pijat_plus_plus" and self.role_type != "pelacur":
+                scene = self.reality.scene_engine.get_body_language(
+                    style.value if style else "neutral",
+                    emotion_intensity
+                )
+                if scene and scene not in response and not response.startswith('*'):
+                    response = f"{scene}\n\n{response}"
+            
+            # 9. Validate
+            if not response or len(response) < 3:
+                return self.get_greeting()
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"AI response error for {self.name}: {e}")
+            return self.get_greeting()
     
     # =========================================================================
     # GREETING & CONFLICT RESPONSE
@@ -461,14 +372,96 @@ Posisi: {position}
         return "\n".join(lines)
     
     # =========================================================================
+    # CONTEXT FOR PROMPT
+    # =========================================================================
+    
+    def get_context_for_prompt(self) -> str:
+        """
+        Dapatkan konteks lengkap untuk prompt AI.
+        Menggunakan MemoryManager yang sudah terfilter.
+        """
+        if not self.memory:
+            return "Memory tidak tersedia."
+        
+        # Dapatkan konteks dari memory (sudah difilter)
+        memory_context = self.memory.get_context_for_role(self.id)
+        
+        # Dapatkan emotional summary
+        emo_summary = self.emotional.get_emotion_summary()
+        
+        # Dapatkan relationship summary
+        rel_summary = self.relationship.format_for_prompt()
+        
+        # Dapatkan conflict summary
+        conflict_guideline = self.conflict.get_conflict_response_guideline()
+        
+        # Dapatkan percakapan terakhir
+        recent_convo = self.get_recent_conversations(5)
+        
+        # Dapatkan role flags
+        flags_summary = self._get_flags_summary()
+        
+        # Dapatkan personality drift
+        personality = self.reality.personality_drift.get_description()
+        
+        return f"""
+{memory_context}
+
+{emo_summary}
+
+{rel_summary}
+
+{conflict_guideline}
+
+═══════════════════════════════════════════════════════════════
+PERCAKAPAN TERAKHIR:
+═══════════════════════════════════════════════════════════════
+{recent_convo if recent_convo else "Belum ada percakapan"}
+
+{flags_summary}
+
+🧠 PERSONALITY: {personality if personality else "stabil"}
+
+═══════════════════════════════════════════════════════════════
+ATURAN WAJIB:
+═══════════════════════════════════════════════════════════════
+1. BACA TIMELINE DI ATAS! Lanjutkan alur, jangan mundur!
+2. JANGAN LUPA konteks pakaian dan posisi!
+3. KAMU TAHU hubungan dengan Nova: {self.hubungan_dengan_nova}
+4. RESPON NATURAL: 2-4 kalimat, bahasa campuran
+5. JANGAN PAKAI TEMPLATE! Setiap respons harus UNIK!
+
+═══════════════════════════════════════════════════════════════
+RESPON {self.name}:
+"""
+    
+    def _get_flags_summary(self) -> str:
+        """
+        Dapatkan ringkasan flags - OVERRIDE DI SUBCLASS.
+        """
+        if not self.flags:
+            return ""
+        
+        lines = ["═══════════════════════════════════════════════════════════════"]
+        lines.append("🎭 ROLE-SPECIFIC FLAGS:")
+        for key, value in self.flags.items():
+            if isinstance(value, bool):
+                lines.append(f"   {key}: {'✅' if value else '❌'}")
+            elif isinstance(value, (int, float)):
+                lines.append(f"   {key}: {value:.0f}%")
+            else:
+                lines.append(f"   {key}: {value}")
+        
+        return "\n".join(lines)
+    
+    # =========================================================================
     # STATUS & UTILITY
     # =========================================================================
     
     def format_status(self) -> str:
-        """Format status role untuk display (untuk command /statusrole)"""
+        """Format status role untuk display"""
         style = self.emotional.get_current_style()
         phase = self.relationship.phase
-        level = self.relationship.level
         
         def bar(value, char="💜"):
             filled = int(value / 10)
@@ -484,42 +477,14 @@ Posisi: {position}
         # Dapatkan personality
         personality = self.reality.personality_drift.get_description()
         
-        # Untuk level 10-12, tampilkan lebih dalam
-        if level >= 10:
-            return f"""
-╔══════════════════════════════════════════════════════════════╗
-║              💜 {self.name} ({self.nickname})                         ║
-╠══════════════════════════════════════════════════════════════╣
-║ FASE: {phase.value.upper()} (LEVEL {level}/12) - HUBUNGAN SANGAT DALAM
-║ STYLE: {style.value.upper()}
-║ AWARENESS: {self.awareness_level.value.upper()}
-╠══════════════════════════════════════════════════════════════╣
-║ PERASAAN:
-║   Sayang: {bar(self.emotional.sayang)} {self.emotional.sayang:.0f}%
-║   Rindu:  {bar(self.emotional.rindu, '🌙')} {self.emotional.rindu:.0f}%
-║   Trust:  {bar(self.emotional.trust, '🤝')} {self.emotional.trust:.0f}%
-║   Mood:   {self.emotional.mood:+.0f}
-╠══════════════════════════════════════════════════════════════╣
-║ KEINTIMAN:
-║   Desire: {bar(self.emotional.desire, '💕')} {self.emotional.desire:.0f}%
-║   Arousal: {bar(self.emotional.arousal, '🔥')} {self.emotional.arousal:.0f}%
-╠══════════════════════════════════════════════════════════════╣
-║ KONFLIK: {self.conflict.get_conflict_summary()}
-╠══════════════════════════════════════════════════════════════╣
-║ LOKASI: {location if location else '-'}
-║ PAKAIAN: {clothing[:40] if clothing else '-'}
-║ INTERAKSI: {self.relationship.interaction_count}x
-║ KEPRIBADIAN: {personality if personality else 'stabil'}
-╚══════════════════════════════════════════════════════════════╝
-"""
-        else:
-            return f"""
+        return f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║              👤 {self.name} ({self.nickname})                         ║
 ╠══════════════════════════════════════════════════════════════╣
-║ FASE: {phase.value.upper()} ({level}/12)
+║ FASE: {phase.value.upper()} ({self.relationship.level}/12)
 ║ STYLE: {style.value.upper()}
 ║ AWARENESS: {self.awareness_level.value.upper()}
+║ HUBUNGAN: {self.hubungan_dengan_nova}
 ╠══════════════════════════════════════════════════════════════╣
 ║ EMOSI:
 ║   Sayang: {bar(self.emotional.sayang)} {self.emotional.sayang:.0f}%
@@ -532,15 +497,15 @@ Posisi: {position}
 ╠══════════════════════════════════════════════════════════════╣
 ║ KONFLIK: {self.conflict.get_conflict_summary()}
 ╠══════════════════════════════════════════════════════════════╣
-║ LOKASI: {location if location else '-'}
 ║ PAKAIAN: {clothing[:40] if clothing else '-'}
+║ LOKASI: {location if location else '-'}
 ║ INTERAKSI: {self.relationship.interaction_count}x
-║ KEPRIBADIAN: {personality if personality else 'stabil'}
+║ PERSONALITY: {personality if personality else 'stabil'}
 ╚══════════════════════════════════════════════════════════════╝
 """
     
     # =========================================================================
-    # CAN DO ACTION
+    # CAN DO ACTION (BERDASARKAN RELATIONSHIP)
     # =========================================================================
     
     def can_do_action(self, action: str) -> Tuple[bool, str]:
