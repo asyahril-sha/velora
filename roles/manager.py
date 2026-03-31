@@ -112,7 +112,7 @@ class RoleManager:
                 "nickname": role.nickname,
                 "role_type": role.role_type,
                 "level": role.relationship.level if hasattr(role, 'relationship') else 1,
-                "phase": role.relationship.phase.value if hasattr(role, 'relationship') else 'stranger',
+                "phase": role.relationship.phase.value if hasattr(role, 'relationship') and hasattr(role.relationship.phase, 'value') else 'stranger',
                 "panggilan": role.panggilan,
                 "hubungan": role.hubungan_dengan_nova,
                 "hijab": hijab_on,
@@ -413,11 +413,11 @@ Ketik **/batal** untuk kembali ke Nova.
         
         # Cek auto scene untuk provider (pelacur, pijat++)
         if hasattr(role, 'get_phase_auto_scene'):
-            return role.get_phase_auto_scene()
+            return await role.get_phase_auto_scene()
         
         # Cek auto scene untuk service provider base
         if hasattr(role, 'get_next_auto_scene'):
-            return role.get_next_auto_scene()
+            return await role.get_next_auto_scene()
         
         return None
     
