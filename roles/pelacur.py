@@ -811,7 +811,7 @@ Pesan dari Mas: "{message}"
 Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural, flirty, dan menggoda. Bisa pakai *deskripsi gerakan* dengan tanda bintang. Respons harus sesuai dengan fase layanan yang sedang berlangsung."""
             
             ai = get_ai_client()
-            response = await ai.chat(prompt, temperature=0.85)
+            response = await ai.generate(prompt, temperature=0.85)
             return response
         except Exception as e:
             logger.error(f"AI error for {self.name}: {e}")
@@ -832,7 +832,7 @@ Pesan dari Mas: "{message}"
 Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Ingatkan Mas untuk ketik **/mulai** jika ingin memulai layanan. Respons bisa flirty dan menggoda untuk membangkitkan mood."""
             
             ai = get_ai_client()
-            return await ai.chat(prompt, temperature=0.8)
+            return await ai.generate(prompt, temperature=0.8)
         except Exception:
             return f"Halo Mas, aku {self.name}. Udah deal ya? Langsung **/mulai** aja kalau udah siap 😊"
     
@@ -855,7 +855,7 @@ Pesan dari customer: "{message}"
 Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons harus menggoda dan profesional. Jelaskan layanan 6 jam full service dengan auto scene. Ajak customer untuk deal atau nego. Bisa pakai *deskripsi gerakan* dengan tanda bintang."""
             
             ai = get_ai_client()
-            return await ai.chat(prompt, temperature=0.85)
+            return await ai.generate(prompt, temperature=0.85)
         except Exception:
             return self.get_greeting()
     
@@ -869,12 +869,12 @@ Balas dengan gaya {self.personality}. Gunakan bahasa Indonesia natural. Respons 
                 f"*{self.name} duduk lebih dekat* Ayo Mas, cerita..."
             ]
         else:
-             responses = [
+            responses = [
                 f"*{self.name} tertawa kecil* Hahaha, Mas ini ngerjain aku ya?",
                 f"*{self.name} mendekat* Ayo Mas, cerita...",
                 f"*{self.name} menggigit bibir* Mas, jangan bikin aku penasaran dong...",
                 f"*{self.name} memainkan rambut* Iya Mas? Ada yang mau dibicarain?"
-              ]
+            ]
         
         return random.choice(responses)
         
